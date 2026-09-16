@@ -1,4 +1,11 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { graph } from "./graph.js";
+
+// バンドラー（Vite/Vitest）が node:sqlite を外部モジュールとして認識できず解決に失敗するため、
+// 静的 import ではなく process.getBuiltinModule 経由で読み込む
+const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
 
 /**
  * データ保存の抽象化。コレクション（=SharePoint リスト）ごとに JSON 文書を保存する。
@@ -45,6 +52,81 @@ export class MemoryStore implements DocStore {
   }
   async readPhoto(name: string) {
     return this.photos.get(name) ?? null;
+  }
+}
+
+/**
+ * ローカルファイルに実際に保存する DocStore。Microsoft 365 のアカウントなしで、
+ * サーバーを再起動してもデータが消えないことを確認したいときに使う（STORE=sqlite）。
+ * SharePointStore と同じ「DocId/PartitionKey/Data(JSON)」の汎用スキーマを、
+ * Node.js 組み込みの node:sqlite で1つのテーブルに保存するだけの単純な実装。
+ */
+export class SqliteStore implements DocStore {
+  private db: DatabaseSyncType;
+  private photoDir: string;
+  private closed = false;
+
+  constructor(dbPath: string, photoDir: string) {
+    mkdirSync(dirname(dbPath), { recursive: true });
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS docs (
+        collection TEXT NOT NULL,
+        doc_id TEXT NOT NULL,
+        partition_key TEXT NOT NULL,
+        data TEXT NOT NULL,
+        PRIMARY KEY (collection, doc_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_docs_partition ON docs(collection, partition_key);
+    `);
+    this.photoDir = photoDir;
+    mkdirSync(photoDir, { recursive: true });
+  }
+
+  async list<T>(c: Collection, partition?: string) {
+    const rows = partition
+      ? this.db.prepare("SELECT data FROM docs WHERE collection = ? AND partition_key = ?").all(c, partition)
+      : this.db.prepare("SELECT data FROM docs WHERE collection = ?").all(c);
+    return rows.map((r) => JSON.parse(r.data as string) as T);
+  }
+
+  async get<T>(c: Collection, id: string) {
+    const row = this.db.prepare("SELECT data FROM docs WHERE collection = ? AND doc_id = ?").get(c, id);
+    return row ? (JSON.parse(row.data as string) as T) : null;
+  }
+
+  async put<T>(c: Collection, id: string, partition: string, data: T) {
+    this.db
+      .prepare(
+        `INSERT INTO docs (collection, doc_id, partition_key, data) VALUES (?, ?, ?, ?)
+         ON CONFLICT(collection, doc_id) DO UPDATE SET partition_key = excluded.partition_key, data = excluded.data`,
+      )
+      .run(c, id, partition, JSON.stringify(data));
+  }
+
+  async remove(c: Collection, id: string) {
+    this.db.prepare("DELETE FROM docs WHERE collection = ? AND doc_id = ?").run(c, id);
+  }
+
+  async savePhoto(name: string, bytes: Uint8Array, contentType: string) {
+    writeFileSync(join(this.photoDir, name), bytes);
+    writeFileSync(join(this.photoDir, `${name}.contenttype`), contentType);
+    return name;
+  }
+
+  async readPhoto(name: string) {
+    const path = join(this.photoDir, name);
+    if (!existsSync(path)) return null;
+    const typePath = `${path}.contenttype`;
+    const contentType = existsSync(typePath) ? readFileSync(typePath, "utf8") : "application/octet-stream";
+    return { bytes: readFileSync(path), contentType };
+  }
+
+  /** DBファイルへのハンドルを閉じる（テストで一時ディレクトリを削除する前などに使う）。複数回呼んでも安全 */
+  close() {
+    if (this.closed) return;
+    this.db.close();
+    this.closed = true;
   }
 }
 

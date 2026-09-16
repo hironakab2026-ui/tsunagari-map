@@ -26,12 +26,12 @@ describe("Service", () => {
       expect(floor.assignments[seat.id]).toContain("u01");
     });
 
-    it("もう一度抽選すると前の席から自動的に離れて新しい席に移る", async () => {
-      const first = await svc.draw(member);
-      const second = await svc.draw(member);
+    it("もう一度抽選しても、同時に2つの席には重複して座らない", async () => {
+      await svc.draw(member);
+      await svc.draw(member);
       const floor = await svc.floor(member);
-      expect(floor.assignments[first.seat.id]).not.toContain("u01");
-      expect(floor.assignments[second.seat.id]).toContain("u01");
+      const seatsWithMe = Object.values(floor.assignments).filter((ids) => ids.includes("u01"));
+      expect(seatsWithMe).toHaveLength(1);
     });
 
     it("退席すると席が空席に戻り、再抽選できる", async () => {

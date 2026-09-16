@@ -41,22 +41,36 @@ npm test          # 共通ロジックとサーバーのテスト（19件）
 npm run dev       # http://localhost:53000 を開く
 ```
 
-`app/.env` の `VITE_USE_MOCK=true` のとき、架空データで全画面を操作できます。
+`app/.env` の `VITE_USE_MOCK=true` のとき、架空データで全画面を操作できます（フロントエンドだけで完結し、サーバーは起動しません）。
 データはブラウザを再読み込みすると初期状態に戻ります。
 
-### サーバーも含めて動かす場合
+### サーバーも含めて、本物のデータベースで動かす場合（Microsoft 365 は不要）
+
+「本当にデータが保存されているか確かめたい」ときは、こちらを使います。SharePoint の代わりに、PCの中に実ファイルとして残る
+SQLite データベース（`api/.data/tsunagari.db`）を使うので、**Microsoft 365 のアカウントが無くてもサーバーを再起動してもデータは消えません**。
 
 [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) をインストールしてから、次を実行します。
 
 ```bash
+npm install -g azure-functions-core-tools@4   # 初回のみ
 cp api/local.settings.sample.json api/local.settings.json
-cd api && npm start               # http://localhost:7071/api
-# 別のターミナルで
-# app/.env を VITE_USE_MOCK=false に変更
-npm run dev
+# api/local.settings.json の STORE を "sqlite" に変更する（AUTH_DISABLED は "true" のまま）
+npm run build:shared && npm run build -w api
+cd api && func start              # http://localhost:7071/api
 ```
 
-`api/local.settings.json` が `STORE=memory`、`AUTH_DISABLED=true` の間は、サインインなしで、メモリ上のデータを使って動きます。
+別のターミナルで、`app/.env` の `VITE_USE_MOCK` を `false` に変えてから `npm run dev` を実行すると、
+ブラウザの画面が実際にこの api サーバー・SQLiteデータベースと通信します（`vite.config.ts` の `/api` プロキシ経由）。
+
+確かめ方の例:
+1. ホーム画面で「抽選する」を押す → 座席が決まる
+2. `func start` を実行しているターミナルを一度 Ctrl+C で止めて、もう一度 `func start` する
+3. ブラウザを再読み込みしても、さっき決まった座席がそのまま残っている（= 本当にファイルに保存されている証拠）
+
+`api/.data/` は `.gitignore` 済みなので、リポジトリには含まれません。中身を空にしたいときはこのフォルダを削除するだけです。
+本番運用では `STORE=sharepoint`（SharePoint リスト）を使います。`sqlite` はローカル確認専用です。
+
+`api/local.settings.json` が `STORE=memory`、`AUTH_DISABLED=true` の場合は、メモリ上のデータで動きます（再起動すると消えます）。
 
 ## 2. Microsoft 365 / Azure につなぐ（情報システム担当の作業）
 

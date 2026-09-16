@@ -1,17 +1,28 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { authenticate, HttpError, type User } from "./auth.js";
 import { Service } from "./service.js";
-import { MemoryStore, SharePointStore, type DocStore } from "./store.js";
+import { MemoryStore, SharePointStore, SqliteStore, type DocStore } from "./store.js";
 
 let service: Service | null = null;
 let ready: Promise<void> | null = null;
 
 export async function getService() {
   if (!service) {
-    const store: DocStore = process.env.STORE === "sharepoint" ? new SharePointStore(process.env.SP_SITE_ID!) : new MemoryStore();
+    const storeKind = process.env.STORE;
+    const store: DocStore =
+      storeKind === "sharepoint" ? new SharePointStore(process.env.SP_SITE_ID!) :
+      storeKind === "sqlite" ? new SqliteStore(process.env.SQLITE_DB_PATH ?? "./.data/tsunagari.db", process.env.SQLITE_PHOTO_DIR ?? "./.data/photos") :
+      new MemoryStore();
     service = new Service(store);
-    // メモリ保存のときはデモデータを入れる
-    ready = process.env.STORE === "sharepoint" ? Promise.resolve() : service.seed();
+    if (storeKind === "sharepoint") {
+      ready = Promise.resolve();
+    } else if (storeKind === "sqlite") {
+      // 初回（データがまだ無いとき）だけデモデータを入れる。以後の起動では既存データをそのまま使う
+      ready = store.list("Branches").then((existing) => (existing.length ? undefined : service!.seed()));
+    } else {
+      // メモリ保存は起動のたびに消えるので、毎回デモデータを入れる
+      ready = service.seed();
+    }
   }
   await ready;
   return service;

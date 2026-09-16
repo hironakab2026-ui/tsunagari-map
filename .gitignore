@@ -6,3 +6,4 @@ dist
 local.settings.json
 teams/build
 teams/.env.teams
+api/.data/
