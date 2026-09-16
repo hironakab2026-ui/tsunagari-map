@@ -13,7 +13,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 本番の Azure Functions は Node 20 で動く。CI は STORE=sqlite（node:sqlite、Node 22.5+）の
+          # テストも実行したいので、テスト専用にこちらは新しいバージョンを使う
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run typecheck

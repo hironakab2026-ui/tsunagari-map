@@ -3,9 +3,15 @@ import { dirname, join } from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { graph } from "./graph.js";
 
-// バンドラー（Vite/Vitest）が node:sqlite を外部モジュールとして認識できず解決に失敗するため、
-// 静的 import ではなく process.getBuiltinModule 経由で読み込む
-const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+// node:sqlite は Node.js 20（本番の Azure Functions ランタイム）には存在しないため、
+// この関数は SqliteStore を実際に使うとき（コンストラクタの中）だけ呼び出す。
+// また Vite/Vitest が静的 import だと node:sqlite を解決できないため、
+// process.getBuiltinModule 経由で読み込む
+function loadSqliteModule() {
+  const mod = process.getBuiltinModule?.("node:sqlite");
+  if (!mod) throw new Error("この Node.js には node:sqlite がありません。STORE=sqlite には Node.js 22.5 以上が必要です");
+  return mod;
+}
 
 /**
  * データ保存の抽象化。コレクション（=SharePoint リスト）ごとに JSON 文書を保存する。
@@ -67,6 +73,7 @@ export class SqliteStore implements DocStore {
   private closed = false;
 
   constructor(dbPath: string, photoDir: string) {
+    const { DatabaseSync } = loadSqliteModule();
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec(`
