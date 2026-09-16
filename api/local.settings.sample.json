@@ -1,0 +1,22 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "STORE": "memory",
+    "AUTH_DISABLED": "true",
+    "DEV_USER_ID": "u05",
+    "DEV_USER_ROLES": "SeatManager,PR,KaizenOwner",
+
+    "TENANT_ID": "<テナントID>",
+    "API_CLIENT_ID": "<Entra アプリのクライアントID>",
+    "API_AUDIENCE": "api://<アプリのドメイン>/<クライアントID>",
+    "GRAPH_CLIENT_SECRET": "<クライアントシークレット（本番はマネージドIDを推奨）>",
+    "SP_SITE_ID": "<SharePoint サイトID>",
+    "TEAMS_APP_ID": "<manifest.json の id>",
+    "APP_TIMEZONE": "Asia/Tokyo",
+    "KAIZEN_REMIND_DAYS": "5"
+  },
+  "Host": { "CORS": "http://localhost:53000", "CORSCredentials": false }
+}

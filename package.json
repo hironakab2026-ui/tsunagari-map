@@ -1,0 +1,17 @@
+{
+  "name": "tsunagari-map",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "app",
+    "api"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w shared",
+    "dev": "npm run build:shared && npm run dev -w app",
+    "test": "npm run build:shared && npm run test -w shared && npm run test -w api",
+    "build": "npm run build:shared && npm run build -w app && npm run build -w api",
+    "typecheck": "npm run build:shared && npm run typecheck -w app && npm run typecheck -w api",
+    "package:teams": "node scripts/package-teams-app.mjs"
+  }
+}

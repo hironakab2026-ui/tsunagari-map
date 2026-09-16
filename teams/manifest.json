@@ -1,0 +1,41 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "0.1.0",
+  "id": "{{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "トヨタユナイテッド DX推進",
+    "websiteUrl": "https://{{APP_DOMAIN}}",
+    "privacyUrl": "https://{{APP_DOMAIN}}/privacy",
+    "termsOfUseUrl": "https://{{APP_DOMAIN}}/terms"
+  },
+  "name": { "short": "つながりマップ", "full": "つながりマップ（社内コミュニケーション）" },
+  "description": {
+    "short": "座席抽選、デジタル名刺、ひとこと投稿、改善の声、声マップ",
+    "full": "部門がほどよく混ざる座席抽選と着席マップ、自己紹介のデジタル名刺、社内ニュースにつながるひとこと投稿、進捗が見える改善の声、拠点別の声マップを提供する社内アプリです。"
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#23407A",
+  "staticTabs": [
+    {
+      "entityId": "tsunagari",
+      "name": "つながりマップ",
+      "contentUrl": "https://{{APP_DOMAIN}}/",
+      "websiteUrl": "https://{{APP_DOMAIN}}/",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity"],
+  "devicePermissions": ["media"],
+  "validDomains": ["{{APP_DOMAIN}}", "{{API_DOMAIN}}"],
+  "webApplicationInfo": {
+    "id": "{{API_CLIENT_ID}}",
+    "resource": "api://{{APP_DOMAIN}}/{{API_CLIENT_ID}}"
+  },
+  "activities": {
+    "activityTypes": [
+      { "type": "seatConfirmed", "description": "座席が確定したとき", "templateText": "{date} の席は {seat} です" },
+      { "type": "kaizenUpdated", "description": "改善の声の進捗が変わったとき", "templateText": "あなたの改善の声が「{status}」になりました" }
+    ]
+  }
+}
