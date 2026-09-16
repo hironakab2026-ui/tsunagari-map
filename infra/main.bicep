@@ -127,7 +127,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'STORE', value: storeKind }
-        { name: 'AUTH_DISABLED', value: string(authDisabled) }
+        { name: 'AUTH_DISABLED', value: authDisabled ? 'true' : 'false' }
         { name: 'DEV_USER_ID', value: devUserId }
         { name: 'DEV_USER_ROLES', value: devUserRoles }
         { name: 'TENANT_ID', value: tenantId }

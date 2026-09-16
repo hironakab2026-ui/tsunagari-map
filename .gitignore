@@ -3,6 +3,8 @@ dist
 *.tsbuildinfo
 .env
 .env.local
+.env.*.local
+.claude/scheduled_tasks.lock
 local.settings.json
 teams/build
 teams/.env.teams

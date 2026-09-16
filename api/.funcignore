@@ -1,0 +1,9 @@
+src
+*.test.ts
+node_modules
+.data
+local.settings.json
+build.mjs
+tsconfig.json
+tsconfig.tsbuildinfo
+.git*
