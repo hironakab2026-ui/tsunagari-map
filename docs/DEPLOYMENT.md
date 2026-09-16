@@ -17,6 +17,30 @@ Teams 上で公開・運用するための手順です。コード側の準備�
 一度この設定が終われば、以後はコードを直して `main` ブランチに push するだけで、
 GitHub Actions が自動的にビルド・テスト・デプロイを行います（随時編集・公開が可能な状態になります）。
 
+## 個人のAzureアカウントで、まず「オンラインで見える形」を公開する場合
+
+会社の Microsoft 365 に接続する前に、まず動いている姿をオンラインで共有したいだけなら、この節だけで完結します。
+①②（Entra ID・SharePoint）は不要です。認証なし（誰でもURLを知っていれば開ける）・SQLiteファイル保存の簡易版になります。
+
+1. [Azure Portal](https://portal.azure.com) で、お持ちの**個人の**Microsoftアカウント（職場アカウントとは別。Gmailでも新規登録できます）でサインインし、無料プランを開始します（クレジットカード確認あり、これは本人が行う必要があります）。
+2. `az login` でサインインします（このリポジトリでは Claude Code から `az login --use-device-code` で行い、表示されたコードをブラウザで入力する形で進めました）。
+3. リソースグループを作り、簡易版としてデプロイします。
+
+```bash
+az group create -n rg-tsunagari-map -l japaneast
+az deployment group create -g rg-tsunagari-map -f infra/main.bicep \
+  -p storeKind=sqlite authDisabled=true nodeVersion=22
+```
+
+4. 出力される `staticWebAppUrl` と `functionAppUrl` を控えます。GitHub Actions の Secrets（`AZURE_STATIC_WEB_APPS_API_TOKEN` 等）を設定すれば、以後 `main` への push で自動的にこのURLへ反映されます（4章を参照）。
+5. `VITE_API_BASE` には `https://<functionAppName>.azurewebsites.net/api` を設定します。
+
+この構成の制約：
+
+- 認証なし（`AUTH_DISABLED=true`）なので、URLを知っている人は誰でも開けます。社外秘の情報は入れないでください。
+- SQLiteファイルは Function App の永続領域（`/home`）に置かれ、通常の再起動では消えませんが、アクセスが増えて複数インスタンスに自動スケールした場合の同時書き込みには強くありません。あくまで少人数での確認・共有用です。
+- 本当に会社で運用するときは、下の「① Entra ID にアプリを登録」以降の手順で `storeKind=sharepoint` に切り替えてください。
+
 ## ① Entra ID にアプリを登録
 
 1. [Entra 管理センター](https://entra.microsoft.com/) →「アプリの登録」→ 新規登録。
