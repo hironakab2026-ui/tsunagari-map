@@ -9,7 +9,10 @@ name: Deploy
 #   AZURE_FUNCTIONAPP_NAME … infra/main.bicep の出力 functionAppName の値
 #   VITE_API_BASE … 例: https://<functionAppName>.azurewebsites.net/api
 #
-# Secrets が未設定のうちは、該当ジョブは自動的にスキップされます（CI が失敗し続けることはありません）。
+# 注意: GitHub Actions は job 単位の if: 条件式の中で secrets コンテキストを直接参照できない
+# （"Unrecognized named-value: 'secrets'" エラーになる）ため、ここでは if: によるスキップは行わない。
+# Secrets が未設定のまま push すると、このワークフローはエラーで失敗する（CIとは別のワークフローなので
+# push 自体やテストには影響しない）。
 
 on:
   push:
@@ -19,7 +22,6 @@ on:
 jobs:
   deploy-app:
     runs-on: ubuntu-latest
-    if: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +44,6 @@ jobs:
 
   deploy-api:
     runs-on: ubuntu-latest
-    if: ${{ secrets.AZURE_FUNCTIONAPP_NAME != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
