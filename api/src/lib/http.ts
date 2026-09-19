@@ -23,6 +23,11 @@ export async function getService() {
       // メモリ保存は起動のたびに消えるので、毎回デモデータを入れる
       ready = service.seed();
     }
+    // 認証なしのデモ動作のときは、席が埋まり自己紹介も入った「使われている姿」にしておく
+    if (storeKind !== "sharepoint" && process.env.AUTH_DISABLED === "true") {
+      const svc = service;
+      ready = ready!.then(() => svc.seedDemoState(process.env.DEV_USER_ID ?? "demo"));
+    }
   }
   await ready;
   return service;

@@ -321,6 +321,42 @@ export class Service {
   }
 
   // ---------- 開発用 ----------
+  /**
+   * デモ表示用：本社の座席を今日の分だけ埋め、デモ利用者の名刺を記入済みにする。
+   * seed() とは別にしてあるのは、テストが「空のフロア」を前提にしているため。
+   * すでに今日の着席があれば何もしない（冪等）。
+   */
+  async seedDemoState(demoUserId: string) {
+    if (!(await this.store.get<Person>("People", demoUserId))) {
+      const demo: Person = {
+        id: demoUserId, fullName: "田中 太郎", email: `${demoUserId}@example.co.jp`, nickname: "たろう",
+        dept: "sales", unit: "店舗営業", branchId: "hq", skills: ["初めての車選び", "ファミリー層"],
+        hobby: "週末は子どもと公園", askMe: "新車の見積り、一緒に考えます", talkOk: true,
+        showOnSeatMap: true, showPrivate: true, acceptWish: true, profileCompleted: true,
+      };
+      await this.store.put("People", demo.id, demo.branchId, demo);
+    }
+    if ((await this.occupancyToday("hq")).size > 0) return;
+    const today = todayJst();
+    const seatByNumber = new Map(SEED_SEATS.map((s) => [s.number, s]));
+    const layout: [number, string[]][] = [
+      [1, ["u01", "u02", "u04"]],
+      [2, ["u07", "u10", "u11", "u08"]],
+      [3, ["u03", "u05"]],
+      [4, ["u06"]],
+      [5, ["u09"]],
+      [6, ["u12"]],
+    ];
+    for (const [number, ids] of layout) {
+      const seat = seatByNumber.get(number)!;
+      const personIds = ids.filter((id) => id !== demoUserId);
+      if (personIds.length === 0) continue;
+      await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
+        branchId: seat.branchId, seatId: seat.id, date: today, personIds,
+      });
+    }
+  }
+
   async seed() {
     for (const b of SEED_BRANCHES) await this.store.put("Branches", b.id, "all", b);
     for (const p of SEED_PEOPLE) await this.store.put("People", p.id, p.branchId, p);

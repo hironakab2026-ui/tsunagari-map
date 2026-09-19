@@ -52,6 +52,27 @@ describe("Service", () => {
     });
   });
 
+  describe("デモ表示用データ", () => {
+    it("席が埋まり、デモ利用者の名刺は記入済みになる。デモ利用者自身は未着席", async () => {
+      await svc.seedDemoState("demo");
+      const demo: User = { id: "demo", email: "", name: "", roles: [] };
+      const me = await svc.me(demo);
+      expect(me.profileCompleted).toBe(true);
+      const floor = await svc.floor(demo);
+      const seated = Object.values(floor.assignments).flat();
+      expect(seated.length).toBeGreaterThanOrEqual(10);
+      expect(seated).not.toContain("demo");
+    });
+
+    it("2回呼んでも着席が重複しない", async () => {
+      await svc.seedDemoState("demo");
+      await svc.seedDemoState("demo");
+      const floor = await svc.floor({ id: "demo", email: "", name: "", roles: [] });
+      const seated = Object.values(floor.assignments).flat();
+      expect(new Set(seated).size).toBe(seated.length);
+    });
+  });
+
   describe("手動着席（QR・座席コード）", () => {
     it("同じ席に2人は着席できない", async () => {
       // hq のプライベート席は "4"〜"7"（グループ席1〜3の後）
