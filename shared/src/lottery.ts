@@ -1,5 +1,5 @@
 import { createRng, shuffle } from "./rng.js";
-import type { Seat, Wish } from "./types.js";
+import type { Seat } from "./types.js";
 
 export interface DrawSeatInput {
   /** 対象支社の座席一覧（通常席のみが抽選対象。focus/care/fixed は手動着席専用） */
@@ -7,8 +7,6 @@ export interface DrawSeatInput {
   /** 現在の着席状況。seatId -> 着席中の personId 配列 */
   occupancy: Record<string, string[]>;
   personId: string;
-  /** 話したい人リクエスト（fromId が抽選を引く本人） */
-  wishes?: Wish[];
   seed?: number;
 }
 
@@ -20,7 +18,6 @@ export interface DrawSeatResult {
 /**
  * 個人単位のオンデマンド座席抽選。
  * グループ席に空きがあればグループ席から優先して選び、その中からランダムに1つ選ぶ。
- * 「話したい人」が既に座っているグループ席に空きがあれば、それを最優先する。
  */
 export function drawSeat(input: DrawSeatInput): DrawSeatResult | null {
   const seed = input.seed ?? Math.floor(Math.random() * 2 ** 31);
@@ -35,14 +32,6 @@ export function drawSeat(input: DrawSeatInput): DrawSeatResult | null {
 
   const eligible = input.seats.filter(isOpen);
   if (eligible.length === 0) return null;
-
-  const wishTargets = new Set((input.wishes ?? []).filter((w) => w.fromId === input.personId).map((w) => w.toId));
-  if (wishTargets.size > 0) {
-    const withWish = eligible.filter(
-      (s) => s.kind === "group" && (input.occupancy[s.id] ?? []).some((pid) => wishTargets.has(pid)),
-    );
-    if (withWish.length > 0) return { seatId: shuffle(withWish, rand)[0].id, seed };
-  }
 
   const groupSeats = eligible.filter((s) => s.kind === "group");
   const pool = groupSeats.length > 0 ? groupSeats : eligible;

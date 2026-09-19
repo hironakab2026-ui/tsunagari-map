@@ -1,20 +1,9 @@
 import { DEPT_LABEL, type Person } from "@tsunagari/shared";
-import { api } from "../lib/api";
-import { useApp } from "../lib/context";
 import { openTeamsChat } from "../lib/teams";
 import { Avatar, DEPT_COLOR, DeptDot } from "./common";
 
 export function PersonCard({ person, mine }: { person: Person; mine: boolean }) {
-  const { toast } = useApp();
   const color = DEPT_COLOR[person.dept];
-  const wish = async () => {
-    try {
-      await api.addWish(person.id);
-      toast("次にあなたが抽選するとき、この人がいるグループ席を優先します。相手には通知されません");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "登録できませんでした");
-    }
-  };
   return (
     <div className="bizcard">
       <div className="band" style={{ background: color }} />
@@ -41,7 +30,6 @@ export function PersonCard({ person, mine }: { person: Person; mine: boolean }) 
         {!mine && (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button className="primary" style={{ margin: 0 }} onClick={() => openTeamsChat(person.email, `${person.nickname}さん、名刺を見て連絡しました`)}>Teamsで話しかける</button>
-            {person.acceptWish && <button className="secondary" style={{ margin: 0, width: "auto", padding: "11px 14px" }} onClick={wish}>次回となりに</button>}
           </div>
         )}
       </div>

@@ -22,7 +22,6 @@ export interface Person {
   talkOk: boolean;       // 気軽に話しかけてOK
   showOnSeatMap: boolean;
   showPrivate: boolean;
-  acceptWish: boolean;   // 話したい人リクエストを受け付けるか
   /** アイコン（顔写真など）。小さく切り抜いた画像の data URL。未設定なら頭文字の丸アイコン */
   avatarUrl?: string;
   /** 名刺を一度でも保存したか。false の間は初回ログイン案内を表示する */
@@ -80,11 +79,6 @@ export interface SeatOccupancy {
   seatId: string;
   date: string;         // YYYY-MM-DD（拠点タイムゾーン）
   personIds: string[];  // group 席は複数人になりうる
-}
-
-export interface Wish {
-  fromId: string;
-  toId: string;
 }
 
 export type PostKind = "hitokoto" | "kaizen" | "official";

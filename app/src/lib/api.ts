@@ -50,7 +50,6 @@ export interface Api {
   seatAdmins(branchId: string): Promise<Person[]>;
   addSeatAdmin(branchId: string, personId: string): Promise<void>;
   removeSeatAdmin(branchId: string, personId: string): Promise<void>;
-  addWish(toId: string): Promise<void>;
   posts(kind: PostKind): Promise<Post[]>;
   createPost(p: NewPost): Promise<Post>;
   react(postId: string): Promise<void>;
@@ -93,7 +92,6 @@ class HttpApi implements Api {
     this.call<void>(`/branches/${branchId}/seat-admins`, { method: "POST", body: JSON.stringify({ personId }) });
   removeSeatAdmin = (branchId: string, personId: string) =>
     this.call<void>(`/branches/${branchId}/seat-admins/${personId}`, { method: "DELETE" });
-  addWish = (toId: string) => this.call<void>("/wishes", { method: "POST", body: JSON.stringify({ toId }) });
   posts = (kind: PostKind) => this.call<Post[]>(`/posts?kind=${kind}`);
   createPost = (p: NewPost) => this.call<Post>("/posts", { method: "POST", body: JSON.stringify(p) });
   react = (postId: string) => this.call<void>(`/posts/${postId}/reactions`, { method: "POST" });

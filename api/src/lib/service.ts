@@ -1,8 +1,8 @@
 import {
-  DEFAULT_ROUTING_RULES, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS, SEED_WISHES,
+  DEFAULT_ROUTING_RULES, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS,
   aggregateVoiceMap, buildSeatsFromConfig, detectPii, drawSeat, routeKaizen,
   type Branch, type KaizenStatus, type Person, type Post, type PostKind,
-  type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy, type Wish,
+  type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy,
 } from "@tsunagari/shared";
 import { randomUUID } from "node:crypto";
 import { HttpError, requireRole, type User } from "./auth.js";
@@ -11,7 +11,7 @@ import type { DocStore } from "./store.js";
 
 interface AuditDoc { postId: string; authorId: string; createdAt: string }
 
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish", "avatarUrl"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
 const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const AVATAR_MAX_LENGTH = 200_000; // data URL の文字数。256px角に切り抜いた JPEG なら 30〜50KB 程度
 const MEDIA_PATTERN = /^data:((?:image\/(?:png|jpeg))|(?:video\/(?:mp4|webm)));base64,(.+)$/;
@@ -34,7 +34,7 @@ export class Service {
     const draft: Person = {
       id: user.id, fullName: user.name, email: user.email, nickname: "",
       dept: "office", unit: "", branchId: "hq", skills: [], talkOk: true,
-      showOnSeatMap: true, showPrivate: false, acceptWish: true, profileCompleted: false,
+      showOnSeatMap: true, showPrivate: false, profileCompleted: false,
     };
     await this.store.put("People", draft.id, draft.branchId, draft);
     return draft;
@@ -200,14 +200,11 @@ export class Service {
     const bid = branchId || me.branchId;
     if (!(await this.store.get<Branch>("Branches", bid))) throw new HttpError(400, "支店の指定が正しくありません");
     const seats = await this.seatsOf(bid);
-    const [occupancyMap, wishes] = await Promise.all([
-      this.occupancyToday(bid),
-      this.store.list<Wish>("Wishes", me.branchId),
-    ]);
+    const occupancyMap = await this.occupancyToday(bid);
     // 自分が今座っている席は空きとして数える（引き直しても、空きがなければ元の席のまま残す）
     const occupancy: Record<string, string[]> = {};
     for (const [seatId, doc] of occupancyMap) occupancy[seatId] = doc.personIds.filter((id) => id !== me.id);
-    const result = drawSeat({ seats, occupancy, personId: me.id, wishes });
+    const result = drawSeat({ seats, occupancy, personId: me.id });
     if (!result) throw new HttpError(409, "現在、空いている席がありません。しばらくしてから再度お試しください");
     await this.checkOut(user);
     const seat = seats.find((s) => s.id === result.seatId)!;
@@ -229,16 +226,6 @@ export class Service {
       n += o.personIds.length;
     }
     return n;
-  }
-
-  async addWish(user: User, toId: string) {
-    const me = await this.me(user);
-    if (toId === me.id) throw new HttpError(400, "自分自身は選べません");
-    const target = await this.store.get<Person>("People", toId);
-    if (!target) throw new HttpError(404, "相手が見つかりません");
-    if (!target.acceptWish) throw new HttpError(400, "この人は現在リクエストを受け付けていません");
-    // 1人1件：同じキーで上書き。相手には通知しない
-    await this.store.put<Wish>("Wishes", `${me.branchId}:${me.id}`, me.branchId, { fromId: me.id, toId });
   }
 
   // ---------- 声 ----------
@@ -372,7 +359,7 @@ export class Service {
         id: demoUserId, fullName: "田中 太郎", email: `${demoUserId}@example.co.jp`, nickname: "たろう",
         dept: "sales", unit: "店舗営業", branchId: "hq", skills: ["初めての車選び", "ファミリー層"],
         hobby: "週末は子どもと公園", askMe: "新車の見積り、一緒に考えます", talkOk: true,
-        showOnSeatMap: true, showPrivate: true, acceptWish: true, profileCompleted: true,
+        showOnSeatMap: true, showPrivate: true, profileCompleted: true,
       };
       await this.store.put("People", demo.id, demo.branchId, demo);
     }
@@ -403,7 +390,7 @@ export class Service {
     if (await this.store.get<Post>("Posts", "demo-h01")) return;
     const P = (id: string, fullName: string, nickname: string, dept: Person["dept"], unit: string, branchId: string, skills: string[]): Person => ({
       id, fullName, email: `${id}@example.co.jp`, nickname, dept, unit, branchId, skills, talkOk: true,
-      showOnSeatMap: true, showPrivate: false, acceptWish: true, profileCompleted: true,
+      showOnSeatMap: true, showPrivate: false, profileCompleted: true,
     });
     const people: Person[] = [
       P("v01", "佐藤 実", "みのる", "sales", "店舗営業", "a", ["新車提案"]),
@@ -458,7 +445,6 @@ export class Service {
     for (const b of SEED_BRANCHES) await this.store.put("Branches", b.id, "all", b);
     for (const p of SEED_PEOPLE) await this.store.put("People", p.id, p.branchId, p);
     for (const s of SEED_SEATS) await this.store.put("Seats", s.id, s.branchId, s);
-    for (const w of SEED_WISHES) await this.store.put("Wishes", `hq:${w.fromId}`, "hq", w);
     for (const p of SEED_POSTS) await this.store.put("Posts", p.id, p.kind, p);
     for (const r of DEFAULT_ROUTING_RULES) await this.store.put("RoutingRules", r.department, "all", r);
   }

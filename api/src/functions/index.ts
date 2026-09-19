@@ -16,7 +16,6 @@ app.http("floor", { methods: ["GET"], route: "floor", authLevel: "anonymous", ha
 app.http("checkin", { methods: ["POST"], route: "checkin", authLevel: "anonymous", handler: route(({ user, svc, body }) => svc.checkIn(user, body.seatCode)) });
 app.http("checkout", { methods: ["POST"], route: "checkout", authLevel: "anonymous", handler: route(async ({ user, svc }) => { await svc.checkOut(user); }) });
 app.http("draw", { methods: ["POST"], route: "seats/draw", authLevel: "anonymous", handler: route(({ user, svc, body }) => svc.draw(user, body?.branchId)) });
-app.http("wishes", { methods: ["POST"], route: "wishes", authLevel: "anonymous", handler: route(async ({ user, svc, body }) => { await svc.addWish(user, body.toId); }) });
 
 // 座席の設定（支社ごとの座席管理者のみ編集可）
 app.http("seatConfig", { methods: ["GET"], route: "branches/{id}/seat-config", authLevel: "anonymous", handler: route(({ req, svc }) => svc.seatConfig(req.params.id)) });

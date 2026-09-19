@@ -1,14 +1,14 @@
 import {
-  SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_WISHES,
+  SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS,
   aggregateVoiceMap, buildSeatsFromConfig, drawSeat, routeKaizen,
-  type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig, type Wish,
+  type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig,
 } from "@tsunagari/shared";
 import type { Api, FloorView, NewPost } from "./api";
 
 // URL に ?mockUser=u13 を付けると、その人としてログインした状態を試せる（初回ログイン導線や権限の確認用）
 const ME = new URLSearchParams(location.search).get("mockUser") ?? "u05";
 const ADMIN_ROLES = ["SeatManager", "PR", "KaizenOwner"];
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish", "avatarUrl"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
 
 const wait = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 const clone = <T,>(v: T): T => structuredClone(v);
@@ -17,7 +17,6 @@ const clone = <T,>(v: T): T => structuredClone(v);
 export class MockApi implements Api {
   private peopleData = clone(SEED_PEOPLE);
   private postsData = clone(SEED_POSTS);
-  private wishes: Wish[] = clone(SEED_WISHES);
   private branchesData: Branch[] = clone(SEED_BRANCHES);
   private seatsByBranch = new Map<string, Seat[]>(
     this.branchesData.map((b) => [b.id, buildSeatsFromConfig(b.id, b.id === "hq" ? "2F" : "1F", b.seatConfig)]),
@@ -98,7 +97,7 @@ export class MockApi implements Api {
     const seats = this.seatsByBranch.get(me.branchId)!;
     const others: Record<string, string[]> = {};
     for (const [id, ids] of Object.entries(this.occupancy)) others[id] = ids.filter((x) => x !== ME);
-    const result = drawSeat({ seats, occupancy: others, personId: ME, wishes: this.wishes });
+    const result = drawSeat({ seats, occupancy: others, personId: ME });
     if (!result) throw new Error("現在、空いている席がありません。しばらくしてから再度お試しください");
     this.removeFromCurrentSeat();
     const seat = seats.find((s) => s.id === result.seatId)!;
@@ -136,10 +135,6 @@ export class MockApi implements Api {
     branch.seatAdminIds = branch.seatAdminIds.filter((id) => id !== personId);
   }
 
-  async addWish(toId: string) {
-    await wait();
-    this.wishes = this.wishes.filter((w) => w.fromId !== ME).concat({ fromId: ME, toId });
-  }
 
   async posts(kind: PostKind) { await wait(); return clone(this.postsData.filter((p) => p.kind === kind)); }
   async createPost(input: NewPost) {

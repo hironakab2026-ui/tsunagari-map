@@ -59,6 +59,12 @@ export function Home() {
 
   return (
     <>
+      <div className="branch-pick work-branch">
+        <label htmlFor="work-branch">今日働く支店</label>
+        <select id="work-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={busy || !!mySeat}>
+          {(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
+        </select>
+      </div>
       <div className="today-seat">
         {mySeat && <button className="leave-btn" onClick={leave} disabled={busy}>退席</button>}
         {mySeat ? (
@@ -78,13 +84,7 @@ export function Home() {
               </div>
             ) : (
               <>
-                <p style={{ marginBottom: 10 }}>今日働く支店を選んで、「抽選する」を押してください。グループ席から優先して割り当てます。席は、ボタンを押すまで決まりません。</p>
-                <div className="branch-pick on-plate">
-                  <label htmlFor="work-branch">支店</label>
-                  <select id="work-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={busy}>
-                    {(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
-                  </select>
-                </div>
+                <p style={{ marginBottom: 10 }}>上で今日働く支店を選び、「抽選する」を押してください。グループ席から優先して割り当てます。席は、ボタンを押すまで決まりません。</p>
                 <button className="draw-btn" onClick={draw} disabled={busy}>抽選する</button>
                 <div className="vacancy" style={{ marginTop: 8 }}>空席 {totalCapacity - occupied}/{totalCapacity}</div>
               </>

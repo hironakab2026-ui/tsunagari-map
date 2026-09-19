@@ -40,15 +40,6 @@ describe("drawSeat", () => {
     expect(drawSeat({ seats, occupancy, personId: "u1", seed: 1 })).toBeNull();
   });
 
-  it("話したい人が既にいるグループ席を最優先で選ぶ", () => {
-    const groupSeats = seats.filter((s) => s.kind === "group");
-    const occupancy: Record<string, string[]> = { [groupSeats[1].id]: ["target"] };
-    for (let seed = 1; seed <= 10; seed++) {
-      const r = drawSeat({ seats, occupancy, personId: "u1", wishes: [{ fromId: "u1", toId: "target" }], seed });
-      expect(r!.seatId).toBe(groupSeats[1].id);
-    }
-  });
-
   it("同じシードなら同じ結果になる", () => {
     const a = drawSeat({ seats, occupancy: {}, personId: "u1", seed: 42 });
     const b = drawSeat({ seats, occupancy: {}, personId: "u1", seed: 42 });

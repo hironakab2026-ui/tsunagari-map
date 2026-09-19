@@ -26,7 +26,6 @@ export function MyCard() {
       <div className="panel" style={{ padding: "4px 14px" }}>
         <div className="opt"><div>座席マップに表示<small>着席中・勤務時間内のみ。退勤で自動消去</small></div><Switch on={me.showOnSeatMap} label="座席マップに表示" onChange={(v) => save({ showOnSeatMap: v })} /></div>
         <div className="opt"><div>趣味・プライベート項目<small>オフにすると仕事の項目だけ表示</small></div><Switch on={me.showPrivate} label="趣味を表示" onChange={(v) => save({ showPrivate: v })} /></div>
-        <div className="opt"><div>「話したい人」リクエストを受け付ける<small>オフにすると抽選で考慮されません</small></div><Switch on={me.acceptWish} label="リクエストを受け付ける" onChange={(v) => save({ acceptWish: v })} /></div>
         <div className="opt"><div>気軽に話しかけてOK<small>オフにすると「集中モード中」と表示</small></div><Switch on={me.talkOk} label="話しかけてOK" onChange={(v) => save({ talkOk: v })} /></div>
       </div>
     </>

@@ -10,7 +10,7 @@ if (!TENANT_ID || !API_CLIENT_ID || !GRAPH_CLIENT_SECRET || !SP_SITE_ID) {
   console.error("TENANT_ID, API_CLIENT_ID, GRAPH_CLIENT_SECRET, SP_SITE_ID を設定してください");
   process.exit(1);
 }
-const LISTS = ["People", "Branches", "Seats", "Assignments", "Wishes", "Posts", "Reactions", "AnonymousAudit", "RoutingRules"];
+const LISTS = ["People", "Branches", "Seats", "Assignments", "Posts", "Reactions", "AnonymousAudit", "RoutingRules"];
 
 const cred = new ClientSecretCredential(TENANT_ID, API_CLIENT_ID, GRAPH_CLIENT_SECRET);
 async function graph(path, init = {}) {

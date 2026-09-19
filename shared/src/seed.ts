@@ -1,4 +1,4 @@
-import type { Branch, Person, Post, Wish } from "./types.js";
+import type { Branch, Person, Post } from "./types.js";
 import { DEFAULT_SEAT_CONFIG } from "./types.js";
 import { buildSeatsFromConfig } from "./lottery.js";
 
@@ -17,7 +17,7 @@ const P = (
   skills: string[], hobby: string, askMe: string, talkOk = true,
 ): Person => ({
   id, fullName, email: `${id}@example.co.jp`, nickname, dept, unit, branchId: "hq", skills, hobby, askMe, talkOk,
-  showOnSeatMap: true, showPrivate: true, acceptWish: true, profileCompleted: true,
+  showOnSeatMap: true, showPrivate: true, profileCompleted: true,
 });
 
 export const SEED_PEOPLE: Person[] = [
@@ -36,17 +36,12 @@ export const SEED_PEOPLE: Person[] = [
   // 初回ログインのデモ用：名刺が未入力の新人
   {
     id: "u13", fullName: "小林 蒼", email: "u13@example.co.jp", nickname: "", dept: "office", unit: "本部",
-    branchId: "hq", skills: [], talkOk: true, showOnSeatMap: true, showPrivate: false, acceptWish: true,
+    branchId: "hq", skills: [], talkOk: true, showOnSeatMap: true, showPrivate: false,
     profileCompleted: false,
   },
 ];
 
 export const SEED_SEATS = buildSeatsFromConfig("hq", "2F", { groups: [{ capacity: 4, count: 3 }], privateCount: 4 });
-
-export const SEED_WISHES: Wish[] = [
-  { fromId: "u01", toId: "u02" },
-  { fromId: "u08", toId: "u10" },
-];
 
 const today = new Date().toISOString();
 export const SEED_POSTS: Post[] = [
