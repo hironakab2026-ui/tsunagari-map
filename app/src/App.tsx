@@ -97,7 +97,7 @@ export function App() {
           <div><small>トヨタユナイテッド 社内アプリ</small><h1>{TITLES[tab]}</h1></div>
           <button className="qr-btn" onClick={() => setQrOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h3v3h-3zM20 14v7M14 20h3" /></svg>
-            着席
+            QRで着席
           </button>
         </header>
         <main ref={mainRef}>

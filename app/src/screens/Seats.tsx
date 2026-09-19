@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading, Segmented } from "../components/common";
+import { BranchPicker } from "../components/BranchPicker";
 
 export function Seats() {
   const { me, dataVersion, workBranch: branchId, setWorkBranch: setBranchId } = useApp();
@@ -14,19 +15,11 @@ export function Seats() {
   const editable = list.filter((b) => isAll || b.seatAdminIds.includes(me.id));
   const canEdit = editable.some((b) => b.id === branchId);
 
-  const picker = list.length > 1 && (
-    <div className="branch-pick">
-      <label htmlFor="seat-branch" className="muted">支店</label>
-      <select id="seat-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-        {list.map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
-      </select>
-    </div>
-  );
   const showTabs = editable.length > 0;
   return (
     <>
       {showTabs && <Segmented value={tab} onChange={setTab} options={[["map", "今日の座席"], ["config", "座席の設定"]]} />}
-      {picker}
+      <BranchPicker />
       {tab === "config" && showTabs
         ? (canEdit ? <SeatConfigEditor key={branchId} branchId={branchId} /> : <p className="muted">この支店の座席設定を変更する権限がありません。</p>)
         : <FloorMap branchId={branchId} />}

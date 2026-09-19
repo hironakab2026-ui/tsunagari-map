@@ -4,10 +4,10 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading } from "../components/common";
+import { BranchPicker } from "../components/BranchPicker";
 
 export function Home() {
   const { me, people, openCard, dataVersion, bumpData, toast, workBranch: branchId, setWorkBranch: setBranchId } = useApp();
-  const branches = useAsync(() => api.branches(), []);
   const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
   const kaizen = useAsync(() => api.posts("kaizen"), [dataVersion]);
   const news = useAsync(() => api.posts("hitokoto"), [dataVersion]);
@@ -51,12 +51,7 @@ export function Home() {
 
   return (
     <>
-      <div className="branch-pick work-branch">
-        <label htmlFor="work-branch">今日働く支店</label>
-        <select id="work-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={busy || !!mySeat}>
-          {(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
-        </select>
-      </div>
+      <BranchPicker disabled={busy || !!mySeat} />
       <div className="today-seat">
         {mySeat && <button className="leave-btn" onClick={leave} disabled={busy}>退席</button>}
         {mySeat ? (
