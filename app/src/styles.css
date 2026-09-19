@@ -154,7 +154,7 @@ button.seat:active{transform:scale(.97)}
 .post-video{width:100%;max-height:320px;border-radius:12px;background:#000;display:block}
 .post-media{margin:8px 0}
 .media-picked{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;word-break:break-all}
-.status-select{border:1px solid var(--line);border-radius:9px;padding:5px 7px;font:inherit;font-size:12px;background:var(--card)}
+.status-select{border:1px solid var(--line);border-radius:9px;padding:5px 7px;font:inherit;font-size:12px;background-color:var(--card)}
 
 /* 声の絞り込み */
 .filter-bar{position:sticky;top:-14px;z-index:4;margin:-14px -16px 10px;padding:14px 16px 8px;background:rgba(247,242,234,.9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
@@ -181,7 +181,7 @@ button.seat:active{transform:scale(.97)}
 .fchips button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 13px;font-size:12.5px;min-height:36px;transition:background-color .2s,color .2s,border-color .2s,transform .15s var(--ease-out)}
 .fchips button:active{transform:scale(.95)}
 .fchips button.on{background:var(--ai);color:#fff;border-color:var(--ai);font-weight:700}
-.fgroup select{border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit;font-size:13px;background:var(--card);min-height:42px}
+.fgroup select{border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit;font-size:13px;background-color:var(--card);min-height:42px}
 .filter-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .filter-actions .primary{width:auto;margin:0;padding:10px 20px;min-height:44px}
 .filter-tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;font-size:12px}
@@ -221,7 +221,7 @@ button.seat:active{transform:scale(.97)}
 .grab{width:42px;height:4px;border-radius:2px;background:var(--oak-300);margin:0 auto 14px}
 .field{margin-top:14px}
 .field label{font-size:12px;font-weight:800;display:block;margin-bottom:6px}
-.field textarea,.field input,.field select,.sheet select{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px;font:inherit;font-size:13px;background:var(--card);resize:none;transition:border-color .2s,box-shadow .2s}
+.field textarea,.field input,.field select,.sheet select{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px;font:inherit;font-size:13px;background-color:var(--card);resize:none;transition:border-color .2s,box-shadow .2s}
 .field textarea:focus,.field input:focus,.field select:focus{border-color:var(--ai);box-shadow:0 0 0 3px rgba(31,66,112,.14)}
 .cats{display:flex;flex-wrap:wrap;gap:6px}
 .cats button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 13px;font-size:12.5px;min-height:36px;transition:background-color .2s,color .2s,border-color .2s,transform .15s var(--ease-out)}
@@ -277,5 +277,16 @@ button.seat:active{transform:scale(.97)}
 
 
 .seat-group.dense .slots .av,.seat-group.dense .slots .av-img{transform:scale(.8)}.seat-group.dense .slot-empty{width:18px;height:18px}
-.branch-pick{display:flex;align-items:center;gap:8px;margin:0 0 10px}.branch-pick select{flex:1;min-height:40px}.branch-pick.on-plate{justify-content:center;margin-bottom:10px}.branch-pick.on-plate label{color:inherit;opacity:.9;font-size:12px}
+.branch-pick{display:flex;align-items:center;gap:10px;margin:0 0 12px}.branch-pick label{font-size:12px;font-weight:800;color:var(--walnut-700);white-space:nowrap}.branch-pick select{flex:1;min-width:0}
 .private-seats{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}
+
+/* ---- フォーム部品の統一：入力欄・選択欄・複数行入力は、どこでも同じ角丸・余白・文字・フォーカス表示にする ---- */
+:where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea){font:inherit;font-size:13px;color:var(--ink);background-color:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:42px;transition:border-color .2s,box-shadow .2s}
+:where(input,select,textarea):focus{border-color:var(--ai);box-shadow:0 0 0 3px rgba(31,66,112,.14)}
+:where(input,select,textarea):disabled{opacity:.55;cursor:not-allowed}
+:where(select){appearance:none;-webkit-appearance:none;padding-right:34px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%277%27 viewBox=%270 0 12 7%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 fill=%27none%27 stroke=%27%2372685D%27 stroke-width=%271.8%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.status-select,.fgroup select,.field select,.sheet select{border-radius:12px}
+.status-select{min-height:34px;padding:5px 30px 5px 10px;font-size:12px}
+.feed-item .chip{align-self:flex-start;margin-top:2px;min-width:6.4em;justify-content:center}
+input[type=number]{text-align:center;padding:8px 6px}
+.field select,.sheet select,.fgroup select{padding-right:34px}
