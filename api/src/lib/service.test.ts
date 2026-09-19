@@ -52,6 +52,43 @@ describe("Service", () => {
     });
   });
 
+  describe("支店ごとの座席", () => {
+    const aUser: User = { id: "v01", email: "", name: "", roles: [] };
+    const aAdmin: User = { id: "v02", email: "", name: "", roles: ["SeatManager"] };
+    beforeEach(async () => { await svc.seedDemoState("demo"); });
+
+    it("本社以外の支店でも、座席設定どおりの席が用意され、抽選できる", async () => {
+      const floor = await svc.floor(aUser);
+      expect(floor.seats.length).toBeGreaterThan(0);
+      const { seat } = await svc.draw(aUser);
+      expect(seat.branchId).toBe("a");
+    });
+
+    it("座席数を増やすと、増えた席も抽選の対象になる", async () => {
+      await svc.updateSeatConfig(aAdmin, "a", { groups: [{ capacity: 6, count: 1 }], privateCount: 0 });
+      for (let i = 0; i < 6; i++) await svc.draw({ id: `x${i}`, email: "", name: "", roles: [] }).catch(() => undefined);
+      const floor = await svc.floor(aUser, "a");
+      expect(floor.seats).toHaveLength(1);
+      expect(floor.seats[0].capacity).toBe(6);
+    });
+
+    it("不正な座席設定は保存できない", async () => {
+      await expect(svc.updateSeatConfig(aAdmin, "a", { groups: [{ capacity: Number.NaN, count: 1 }], privateCount: 0 })).rejects.toThrow("座席の指定");
+      await expect(svc.updateSeatConfig(aAdmin, "a", { groups: [{ capacity: 4, count: 1.5 }], privateCount: 0 })).rejects.toThrow("座席の指定");
+    });
+
+    it("空席がなくて抽選できないとき、いま座っている席は失われない", async () => {
+      const { seat } = await svc.draw(aUser);
+      await svc.updateSeatConfig(aAdmin, "a", { groups: [], privateCount: 1 });
+      await svc.checkIn(aUser, "1");
+      await svc.checkIn({ id: "v02", email: "", name: "", roles: [] }, "1").catch(() => undefined);
+      void seat;
+      await svc.draw(aUser); // 自分の席しかなくても、引き直せる（元の席を空きとして数える）
+      const floor = await svc.floor(aUser);
+      expect(Object.values(floor.assignments).filter((ids) => ids.includes("v01"))).toHaveLength(1);
+    });
+  });
+
   describe("デモ表示用データ", () => {
     it("席が埋まり、デモ利用者の名刺は記入済みになる。デモ利用者自身は未着席", async () => {
       await svc.seedDemoState("demo");

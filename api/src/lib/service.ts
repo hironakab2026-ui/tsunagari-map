@@ -82,8 +82,13 @@ export class Service {
 
   async updateSeatConfig(user: User, branchId: string, config: SeatConfig) {
     if (!(await this.isSeatAdmin(user, branchId))) throw new HttpError(403, "この拠点の座席を編集する権限がありません");
-    if (config.groups.some((g) => g.capacity < 2 || g.count < 0) || config.privateCount < 0) {
-      throw new HttpError(400, "座席の人数・数の指定が正しくありません");
+    const validInt = (n: unknown, min: number, max: number) => Number.isInteger(n) && (n as number) >= min && (n as number) <= max;
+    if (
+      !Array.isArray(config?.groups) ||
+      config.groups.some((g) => !validInt(g.capacity, 2, 20) || !validInt(g.count, 0, 100)) ||
+      !validInt(config.privateCount, 0, 200)
+    ) {
+      throw new HttpError(400, "座席の指定が正しくありません（グループ席は2〜20人、数は0〜100、プライベート席は0〜200）");
     }
     const branch = await this.store.get<Branch>("Branches", branchId);
     if (!branch) throw new HttpError(404, "拠点が見つかりません");
@@ -130,12 +135,23 @@ export class Service {
     return new Map(docs.filter((d) => d.date === today).map((d) => [d.seatId, d]));
   }
 
+  /** 拠点の座席。まだ作られていなければ（本社以外は初期データに座席がない）、座席設定から生成して保存する */
+  private async seatsOf(branchId: string): Promise<Seat[]> {
+    const seats = await this.store.list<Seat>("Seats", branchId);
+    if (seats.length > 0) return seats;
+    const branch = await this.store.get<Branch>("Branches", branchId);
+    if (!branch?.seatConfig) return seats;
+    const built = buildSeatsFromConfig(branchId, branchId === "hq" ? "2F" : "1F", branch.seatConfig);
+    for (const s of built) await this.store.put("Seats", s.id, branchId, s);
+    return built;
+  }
+
   async floor(user: User, branchId?: string) {
     const me = await this.me(user);
     const bid = branchId ?? me.branchId;
-    const [branches, seats, occupancy, people] = await Promise.all([
+    const seats = await this.seatsOf(bid);
+    const [branches, occupancy, people] = await Promise.all([
       this.store.list<Branch>("Branches"),
-      this.store.list<Seat>("Seats", bid),
       this.occupancyToday(bid),
       this.store.list<Person>("People"),
     ]);
@@ -181,16 +197,17 @@ export class Service {
   /** ホーム画面の「抽選する」。自分の拠点内でランダムに席を割り当てる */
   async draw(user: User) {
     const me = await this.me(user);
-    await this.checkOut(user);
-    const [seats, occupancyMap, wishes] = await Promise.all([
-      this.store.list<Seat>("Seats", me.branchId),
+    const seats = await this.seatsOf(me.branchId);
+    const [occupancyMap, wishes] = await Promise.all([
       this.occupancyToday(me.branchId),
       this.store.list<Wish>("Wishes", me.branchId),
     ]);
+    // 自分が今座っている席は空きとして数える（引き直しても、空きがなければ元の席のまま残す）
     const occupancy: Record<string, string[]> = {};
-    for (const [seatId, doc] of occupancyMap) occupancy[seatId] = doc.personIds;
+    for (const [seatId, doc] of occupancyMap) occupancy[seatId] = doc.personIds.filter((id) => id !== me.id);
     const result = drawSeat({ seats, occupancy, personId: me.id, wishes });
     if (!result) throw new HttpError(409, "現在、空いている席がありません。しばらくしてから再度お試しください");
+    await this.checkOut(user);
     const seat = seats.find((s) => s.id === result.seatId)!;
     const today = todayJst();
     const existing = await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`);

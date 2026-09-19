@@ -1,4 +1,4 @@
-﻿/* ===== デザイントークン：オーク材の木目 × 深いネイビー × 若草色 ===== */
+/* ===== デザイントークン：オーク材の木目 × 深いネイビー × 若草色 ===== */
 :root{
   --oak-50:#F7F2EA; --oak-100:#EFE4D3; --oak-200:#E2D0B5; --oak-300:#CDAE84; --oak-500:#B08556;
   --walnut-600:#7A5334; --walnut-700:#5F3F27; --walnut-900:#33200F;
@@ -89,11 +89,11 @@ nav.tabs button:active svg{transform:scale(.9)}
 .floor-head{display:flex;justify-content:space-between;font-size:12px;color:var(--walnut-700);font-weight:700;margin-bottom:10px}
 .lbl-row{font-size:10.5px;color:var(--walnut-600);font-weight:800;letter-spacing:.06em;margin:12px 4px 8px}
 .group-seats{display:flex;flex-wrap:wrap;gap:16px;padding:2px 4px}
-.seat-group{width:98px;height:98px;border-radius:50%;border:3px solid #A87C4E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;position:relative;
+.seat-group{--d:98px;width:var(--d);height:var(--d);border-radius:50%;border:3px solid #A87C4E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;position:relative;
   background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.4),transparent 55%),var(--grain),var(--grain-hi),linear-gradient(145deg,#DEBE92,#BE935F);background-size:auto,520px 140px,380px 100px,auto;
   box-shadow:0 8px 12px -7px rgba(51,32,15,.6),inset 0 -4px 8px rgba(80,50,20,.28);transition:transform .25s var(--ease-out),box-shadow .25s,border-color .25s}
 .seat-group .num{position:absolute;top:7px;font-size:10.5px;color:var(--walnut-900);font-weight:800;text-shadow:0 1px 0 rgba(255,255,255,.4)}
-.seat-group .slots{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;max-width:68px;margin-top:9px}
+.seat-group .slots{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;max-width:calc(var(--d) - 30px);margin-top:9px}
 .seat-group .slots button{padding:0;line-height:0;transition:transform .2s var(--ease-out)}
 .seat-group .slots button:hover{transform:scale(1.15)}
 .seat-group .slots .av{box-shadow:0 0 0 2px #FFFDF9,0 2px 4px rgba(51,32,15,.3);animation:pop .4s cubic-bezier(.3,1.5,.5,1) backwards}
@@ -275,3 +275,7 @@ button.seat:active{transform:scale(.97)}
 }
 
 
+
+.seat-group.dense .slots .av,.seat-group.dense .slots .av-img{transform:scale(.8)}.seat-group.dense .slot-empty{width:18px;height:18px}
+.branch-pick{display:flex;align-items:center;gap:8px;margin:0 0 10px}.branch-pick select{flex:1;min-height:40px}
+.private-seats{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}

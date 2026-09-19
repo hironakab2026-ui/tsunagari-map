@@ -6,21 +6,43 @@ import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading, Segmented } from "../components/common";
 
 export function Seats() {
-  const { me } = useApp();
+  const { me, dataVersion } = useApp();
   const [tab, setTab] = useState<"map" | "config">("map");
-  if (!me.isSeatAdmin) return <FloorMap />;
+  const [branchId, setBranchId] = useState(me.branchId);
+  const branches = useAsync(() => api.branches(), [dataVersion]);
+  const list = branches.data ?? [];
+  const isAll = !!(me.roles?.includes("SeatManager") || me.roles?.includes("Admin"));
+  const editable = list.filter((b) => isAll || b.seatAdminIds.includes(me.id));
+  const canEdit = editable.some((b) => b.id === branchId);
+
+  const picker = list.length > 1 && (
+    <div className="branch-pick">
+      <label htmlFor="seat-branch" className="muted">支店</label>
+      <select id="seat-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+        {list.map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
+      </select>
+    </div>
+  );
+  const showTabs = editable.length > 0;
   return (
     <>
-      <Segmented value={tab} onChange={setTab} options={[["map", "今日の座席"], ["config", "座席の設定"]]} />
-      {tab === "map" ? <FloorMap /> : <SeatConfigEditor />}
+      {showTabs && <Segmented value={tab} onChange={setTab} options={[["map", "今日の座席"], ["config", "座席の設定"]]} />}
+      {picker}
+      {tab === "config" && showTabs
+        ? (canEdit ? <SeatConfigEditor key={branchId} branchId={branchId} /> : <p className="muted">この支店の座席設定を変更する権限がありません。</p>)
+        : <FloorMap branchId={branchId} />}
     </>
   );
 }
+/** 定員が多いほど円卓を大きくする（アイコンが円からはみ出さないように） */
+const groupSize = (capacity: number): React.CSSProperties => ({ "--d": `${capacity <= 4 ? 98 : capacity <= 6 ? 112 : capacity <= 9 ? 128 : capacity <= 14 ? 152 : 176}px` } as React.CSSProperties);
 
-function FloorMap() {
+const clampInt = (n: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(Number.isFinite(n) ? n : min)));
+
+function FloorMap({ branchId }: { branchId: string }) {
   const { me, people, openCard, dataVersion } = useApp();
   const [q, setQ] = useState("");
-  const floor = useAsync(() => api.floor(me.branchId), [dataVersion]);
+  const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
   if (floor.loading && !floor.data) return <Loading />;
   if (floor.error || !floor.data) return <ErrorBox error={floor.error} />;
   const { seats, assignments, branch } = floor.data;
@@ -54,7 +76,7 @@ function FloorMap() {
                 const full = occupants.length >= s.capacity;
                 const anyHit = occupants.some((p) => isHit(p.id));
                 return (
-                  <div key={s.id} className={`seat-group ${full ? "full" : ""} ${anyHit ? "hit" : ""}`}>
+                  <div key={s.id} className={`seat-group ${full ? "full" : ""} ${anyHit ? "hit" : ""} ${s.capacity > 9 ? "dense" : ""}`} style={groupSize(s.capacity)}>
                     <span className="num">{s.label}</span>
                     <div className="slots">
                       {occupants.map((p) => (
@@ -102,10 +124,10 @@ function FloorMap() {
   );
 }
 
-function SeatConfigEditor() {
+function SeatConfigEditor({ branchId }: { branchId: string }) {
   const { me, toast, bumpData } = useApp();
-  const cfg = useAsync(() => api.getSeatConfig(me.branchId), []);
-  const admins = useAsync(() => api.seatAdmins(me.branchId), []);
+  const cfg = useAsync(() => api.getSeatConfig(branchId), []);
+  const admins = useAsync(() => api.seatAdmins(branchId), []);
   const people = useAsync(() => api.people(), []);
   const [groups, setGroups] = useState<SeatGroupDef[]>([]);
   const [privateCount, setPrivateCount] = useState(0);
@@ -123,7 +145,7 @@ function SeatConfigEditor() {
 
   const save = async () => {
     setBusy(true); setError(null);
-    try { await api.updateSeatConfig(me.branchId, { groups, privateCount }); bumpData(); toast("座席の設定を保存しました"); }
+    try { await api.updateSeatConfig(branchId, { groups: groups.map((g) => ({ capacity: clampInt(g.capacity, 2, 20), count: clampInt(g.count, 0, 100) })), privateCount: clampInt(privateCount, 0, 200) }); bumpData(); toast("座席の設定を保存しました"); }
     catch (e) { setError(e); } finally { setBusy(false); }
   };
 
@@ -164,17 +186,17 @@ function SeatConfigEditor() {
           {(admins.data ?? []).map((a) => (
             <div className="opt" key={a.id}>
               <div>{a.nickname || a.fullName}さん</div>
-              <button className="text-btn" onClick={async () => { await api.removeSeatAdmin(me.branchId, a.id); admins.reload(); }}>削除</button>
+              <button className="text-btn" onClick={async () => { await api.removeSeatAdmin(branchId, a.id); admins.reload(); }}>削除</button>
             </div>
           ))}
           <div className="opt" style={{ gap: 8 }}>
             <select value={newAdminId} onChange={(e) => setNewAdminId(e.target.value)} style={{ flex: 1 }}>
               <option value="">追加する人を選ぶ</option>
-              {(people.data ?? []).filter((p) => p.branchId === me.branchId).map((p) => (
+              {(people.data ?? []).filter((p) => p.branchId === branchId).map((p) => (
                 <option key={p.id} value={p.id}>{p.nickname || p.fullName}</option>
               ))}
             </select>
-            <button className="text-btn" disabled={!newAdminId} onClick={async () => { await api.addSeatAdmin(me.branchId, newAdminId); setNewAdminId(""); admins.reload(); }}>追加</button>
+            <button className="text-btn" disabled={!newAdminId} onClick={async () => { await api.addSeatAdmin(branchId, newAdminId); setNewAdminId(""); admins.reload(); }}>追加</button>
           </div>
         </div>
       )}

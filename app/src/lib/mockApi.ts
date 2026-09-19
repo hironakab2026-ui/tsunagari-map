@@ -95,10 +95,12 @@ export class MockApi implements Api {
   async draw() {
     await wait(300);
     const me = this.currentPerson();
-    this.removeFromCurrentSeat();
     const seats = this.seatsByBranch.get(me.branchId)!;
-    const result = drawSeat({ seats, occupancy: this.occupancy, personId: ME, wishes: this.wishes });
+    const others: Record<string, string[]> = {};
+    for (const [id, ids] of Object.entries(this.occupancy)) others[id] = ids.filter((x) => x !== ME);
+    const result = drawSeat({ seats, occupancy: others, personId: ME, wishes: this.wishes });
     if (!result) throw new Error("現在、空いている席がありません。しばらくしてから再度お試しください");
+    this.removeFromCurrentSeat();
     const seat = seats.find((s) => s.id === result.seatId)!;
     this.occupancy[seat.id] = [...(this.occupancy[seat.id] ?? []), ME];
     return { seat };
