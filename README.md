@@ -47,7 +47,7 @@ npm run dev       # http://localhost:53000 を開く
 ### サーバーも含めて、本物のデータベースで動かす場合（Microsoft 365 は不要）
 
 「本当にデータが保存されているか確かめたい」ときは、こちらを使います。SharePoint の代わりに、PCの中に実ファイルとして残る
-SQLite データベース（`api/.data/tsunagari.db`）を使うので、**Microsoft 365 のアカウントが無くてもサーバーを再起動してもデータは消えません**。
+SQLite データベース（`api/.data/tsunagari.db`）を使うので、**Microsoft 365 のアカウントが無くても、手元のPCではサーバーを再起動してもデータは消えません**（Azure に置いた場合は消えます。`docs/DEPLOYMENT.md` 参照）。
 
 [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) をインストールしてから、次を実行します。
 

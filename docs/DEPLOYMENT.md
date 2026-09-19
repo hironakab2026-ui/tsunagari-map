@@ -38,7 +38,7 @@ az deployment group create -g rg-tsunagari-map -f infra/main.bicep \
 この構成の制約：
 
 - 認証なし（`AUTH_DISABLED=true`）なので、URLを知っている人は誰でも開けます。社外秘の情報は入れないでください。
-- SQLiteファイルは Function App の永続領域（`/home`）に置かれ、通常の再起動では消えませんが、アクセスが増えて複数インスタンスに自動スケールした場合の同時書き込みには強くありません。あくまで少人数での確認・共有用です。
+- **データは永続しません。** Azure Functions（Linux 従量課金プラン）上の SQLite ファイルは、実機で数日後に初期状態へ戻ることを確認しました（`/home` 配下でも消える）。この構成は「サンプルデータ入りのデモを見せる」用途に限り、入力したデータを残したい場合は SharePoint（`storeKind=sharepoint`）か、Azure Table Storage など別の保存先が必要です。
 - 本当に会社で運用するときは、下の「① Entra ID にアプリを登録」以降の手順で `storeKind=sharepoint` に切り替えてください。
 
 ## ① Entra ID にアプリを登録

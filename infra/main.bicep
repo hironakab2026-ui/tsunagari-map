@@ -67,9 +67,8 @@ var functionAppName = '${appName}-api'
 var planName = '${appName}-plan'
 var appInsightsName = '${appName}-insights'
 var staticWebAppName = '${appName}-app'
-// Linux Consumption プランでは /home が Azure Files 上に永続化される。storeKind=sqlite のとき、
-// SQLite ファイルをここに置くことで、再起動やスケールアウトをまたいでもデータが残る
-// （同時書き込みが多い高負荷用途には向かない。会社導入時は storeKind=sharepoint を使う）
+// 注意: storeKind=sqlite の SQLite ファイルは、実機確認で数日後に消えて初期データへ戻った。
+// デモ表示専用で、データの保存先としては使えない。会社導入時は storeKind=sharepoint を使う
 var sqliteDbPath = '/home/data/tsunagari.db'
 var sqlitePhotoDir = '/home/data/photos'
 
