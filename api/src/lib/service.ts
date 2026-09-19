@@ -336,6 +336,7 @@ export class Service {
       };
       await this.store.put("People", demo.id, demo.branchId, demo);
     }
+    await this.seedDemoVoices();
     if ((await this.occupancyToday("hq")).size > 0) return;
     const today = todayJst();
     const seatByNumber = new Map(SEED_SEATS.map((s) => [s.number, s]));
@@ -354,6 +355,62 @@ export class Service {
       await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
         branchId: seat.branchId, seatId: seat.id, date: today, personIds,
       });
+    }
+  }
+
+  /** デモ表示用：各支店の社員と、直近1か月の投稿（声マップに拠点ごとの色・つながりが出る量）を入れる */
+  private async seedDemoVoices() {
+    if (await this.store.get<Post>("Posts", "demo-h01")) return;
+    const P = (id: string, fullName: string, nickname: string, dept: Person["dept"], unit: string, branchId: string, skills: string[]): Person => ({
+      id, fullName, email: `${id}@example.co.jp`, nickname, dept, unit, branchId, skills, talkOk: true,
+      showOnSeatMap: true, showPrivate: false, acceptWish: true, profileCompleted: true,
+    });
+    const people: Person[] = [
+      P("v01", "佐藤 実", "みのる", "sales", "店舗営業", "a", ["新車提案"]),
+      P("v02", "鈴木 遥", "はる", "eng", "サービス部", "a", ["点検", "タイヤ"]),
+      P("v03", "高橋 恵", "めぐ", "sales", "店舗営業", "b", ["リース"]),
+      P("v04", "伊藤 剛", "つよし", "eng", "サービス部", "b", ["EV診断"]),
+      P("v05", "渡辺 進", "すすむ", "eng", "板金", "c", ["板金"]),
+      P("v06", "山田 栞", "しおり", "sales", "U-Car", "c", ["査定"]),
+      P("v07", "中村 蓮", "れん", "sales", "店舗営業", "d", ["ファミリー層"]),
+      P("v08", "小川 誠", "まこと", "eng", "サービス部", "d", ["車検"]),
+      P("v09", "加藤 優", "ゆう", "sales", "店舗営業", "e", ["初めての車選び"]),
+      P("v10", "吉田 巧", "たくみ", "eng", "サービス部", "e", ["整備説明"]),
+    ];
+    for (const p of people) await this.store.put("People", p.id, p.branchId, p);
+    const dept = new Map([...people, ...SEED_PEOPLE].map((p) => [p.id, p.dept]));
+
+    // [id, 種類, 投稿者, 支店, カテゴリ, 本文, 拍手, 何日前, 改善の声の状態, 担当, 共同提案者]
+    type Row = [string, PostKind, string, string, string, string, number, number, KaizenStatus?, string?, string[]?];
+    const rows: Row[] = [
+      ["h01", "hitokoto", "v01", "a", "お客様の笑顔", "納車のとき、お子さんが車に手を振ってくれました。", 14, 1],
+      ["h02", "hitokoto", "v02", "a", "できごと", "朝礼でタイヤの溝の見方を共有しました。営業さんもメモを取ってくれました。", 9, 3],
+      ["h03", "hitokoto", "v03", "b", "ありがとう", "在庫確認、サービスの方がすぐ返してくれて助かりました。", 11, 2],
+      ["h04", "hitokoto", "v04", "b", "レース・イベント", "社内チームのサーキット走行会、参加者が去年の倍になりました。", 21, 5],
+      ["h05", "hitokoto", "v04", "b", "できごと", "EV充電の相談会を開きました。10組のお客様が来てくださいました。", 17, 8],
+      ["h06", "hitokoto", "v05", "c", "できごと", "板金の仕上がりを、お客様に工程の写真で見ていただきました。", 12, 4],
+      ["h07", "hitokoto", "v06", "c", "お客様の笑顔", "査定額の理由を丁寧に説明したら、納得して次の車もうちでと言っていただけました。", 25, 6],
+      ["h08", "hitokoto", "v07", "d", "できごと", "店頭のキッズスペースを模様替えしました。", 8, 2],
+      ["h09", "hitokoto", "v08", "d", "ありがとう", "夜遅くの急な点検、営業さんが先にお客様へ連絡してくれて助かりました。", 15, 9],
+      ["h10", "hitokoto", "v09", "e", "お客様の笑顔", "初めて車を買うお客様が「ここで良かった」と言ってくれました。", 19, 1],
+      ["h11", "hitokoto", "v10", "e", "できごと", "整備の待ち時間に見られる、作業の動画を作ってみました。", 13, 7],
+      ["h12", "hitokoto", "u12", "hq", "できごと", "経費精算のよくある質問を、社内ポータルにまとめました。", 6, 10],
+      ["k01", "kaizen", "v07", "d", "業務の手間", "営業が代車の空きを電話で確認している。サービスと同じ画面で見られると助かる。", 22, 12, "inProgress", "サービス部", ["v04"]],
+      ["k02", "kaizen", "v02", "a", "お客様対応", "点検の説明を、営業とエンジニアが一緒にお客様へ伝える場を作りたい。", 16, 15, "reviewing", "サービス部", ["v06"]],
+      ["k03", "kaizen", "v09", "e", "お客様対応", "納車前の最終確認を、営業とサービスで同じチェック表にしたい。", 12, 6, "received", "サービス部", ["v10"]],
+      ["k04", "kaizen", "v05", "c", "設備", "板金ブースの換気が足りず、夏場に作業しづらい。", 9, 20, "done", "総務"],
+      ["k05", "kaizen", "v03", "b", "業務の手間", "リース契約の書類を、店舗ごとに別々に管理している。共通の置き場が欲しい。", 14, 11, "inProgress", "営業企画"],
+      ["k06", "kaizen", "v01", "a", "安全", "店の駐車場の出入口が見えにくく、ひやりとした。ミラーをつけたい。", 18, 4, "received", "安全衛生委員会"],
+      ["k07", "kaizen", "v08", "d", "設備", "工具の置き場が足りない。共用の棚を増やしたい。", 7, 25, "done", "総務"],
+    ];
+    const now = Date.now();
+    for (const [id, kind, authorId, branchId, category, body, reactions, daysAgo, status, assignedTo, coAuthorIds] of rows) {
+      const post: Post & { statusChangedAt?: string } = {
+        id: `demo-${id}`, kind, authorId, authorDept: dept.get(authorId) ?? null, branchId, category, body, reactions,
+        createdAt: new Date(now - daysAgo * 86400_000).toISOString(),
+        ...(kind === "kaizen" ? { status, assignedTo, ...(coAuthorIds ? { coAuthorIds } : {}) } : {}),
+      };
+      await this.store.put("Posts", post.id, kind, post);
     }
   }
 

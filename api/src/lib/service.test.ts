@@ -64,6 +64,20 @@ describe("Service", () => {
       expect(seated).not.toContain("demo");
     });
 
+    it("声マップに全支店の投稿と、支店をまたぐ共同提案が出る", async () => {
+      await svc.seedDemoState("demo");
+      const map = await svc.voiceMap();
+      expect(map.stats.every((s) => s.sales + s.eng + s.office > 0)).toBe(true);
+      expect(map.collaborations.some(([a, b]) => a !== b)).toBe(true);
+    });
+
+    it("2回呼んでも投稿が重複しない", async () => {
+      await svc.seedDemoState("demo");
+      const first = (await svc.posts("hitokoto")).length;
+      await svc.seedDemoState("demo");
+      expect((await svc.posts("hitokoto")).length).toBe(first);
+    });
+
     it("2回呼んでも着席が重複しない", async () => {
       await svc.seedDemoState("demo");
       await svc.seedDemoState("demo");
