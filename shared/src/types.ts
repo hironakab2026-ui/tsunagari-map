@@ -10,9 +10,10 @@ export const DEPT_LABEL: Record<Dept, string> = {
 /** パートナー（社員）とデジタル名刺 */
 export interface Person {
   id: string;            // Entra ID のオブジェクトID
-  fullName: string;      // 氏名（Entra ID から自動入力）
+  fullName: string;      // 氏名（初回は Entra ID から自動入力。本人が編集できる）
   email: string;         // UPN。Teams チャットを開くのに使う
-  nickname: string;      // 呼ばれたい名前
+  /** 呼ばれたい名前。自己紹介の一項目（任意）。座席表・投稿などの表示には使わず、氏名（fullName）を使う */
+  nickname: string;
   dept: Dept;
   unit: string;          // 所属（例：サービス部）
   branchId: string;
@@ -24,6 +25,10 @@ export interface Person {
   showPrivate: boolean;
   /** アイコン（顔写真など）。小さく切り抜いた画像の data URL。未設定なら頭文字の丸アイコン */
   avatarUrl?: string;
+  /** 最後にアプリを開いていた時刻（ISO）。オンライン判定に使う */
+  lastSeenAt?: string;
+  /** /people のときだけ返る。オンライン（最近アプリを開いている、または今日着席中）なら true */
+  online?: boolean;
   /** 名刺を一度でも保存したか。false の間は初回ログイン案内を表示する */
   profileCompleted: boolean;
   /** /me のときだけ返る。Entra のアプリロール */
@@ -110,4 +115,33 @@ export interface Post {
   status?: KaizenStatus;
   assignedTo?: string;
   coAuthorIds?: string[];
+}
+
+/** 共有タスク。全体へのアナウンスとして、ホーム画面に表示する */
+export interface SharedTask {
+  id: string;
+  title: string;
+  body?: string;
+  dueDate?: string;      // YYYY-MM-DD
+  createdBy: string;
+  createdAt: string;
+  doneBy: string[];      // 完了した人の id
+}
+
+/** アプリ内チャットのメッセージ（1対1） */
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  fromId: string;
+  toId: string;
+  body: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+/** チャット一覧の1行 */
+export interface ChatThread {
+  personId: string;      // 相手
+  last: ChatMessage;
+  unread: number;
 }

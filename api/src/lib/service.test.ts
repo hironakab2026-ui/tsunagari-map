@@ -96,6 +96,86 @@ describe("Service", () => {
     });
   });
 
+  describe("オンライン表示", () => {
+    it("アプリを開いた人はオンライン、開いていない人はオフライン", async () => {
+      await svc.heartbeat(member);
+      const list = await svc.people(branchSeatAdmin);
+      expect(list.find((p) => p.id === "u01")?.online).toBe(true);
+      expect(list.find((p) => p.id === "u09")?.online).toBe(false);
+    });
+
+    it("今日着席中の人は、アプリを開いていなくてもオンライン", async () => {
+      await svc.draw({ id: "u09", email: "", name: "", roles: [] });
+      const list = await svc.people(member);
+      expect(list.find((p) => p.id === "u09")?.online).toBe(true);
+    });
+  });
+
+  describe("共有タスク", () => {
+    it("広報が作成でき、全員に表示される。一般社員は作成できない", async () => {
+      await expect(svc.createTask(member, { title: "テスト" })).rejects.toThrow("権限");
+      await svc.createTask(pr, { title: "アンケートに回答", dueDate: "2026-10-01" });
+      const list = await svc.tasks(member);
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({ title: "アンケートに回答", done: false, doneCount: 0 });
+    });
+
+    it("自分の完了をつけ外しでき、完了数に反映される", async () => {
+      const t = await svc.createTask(pr, { title: "提出" });
+      await svc.setTaskDone(member, t.id, true);
+      await svc.setTaskDone(member, t.id, true); // 重複しない
+      expect((await svc.tasks(member))[0]).toMatchObject({ done: true, doneCount: 1 });
+      expect((await svc.tasks(kaizenOwner))[0]).toMatchObject({ done: false, doneCount: 1 });
+      await svc.setTaskDone(member, t.id, false);
+      expect((await svc.tasks(member))[0]).toMatchObject({ done: false, doneCount: 0 });
+    });
+
+    it("タイトルが空・期限の形式が不正なら作成できない。削除は広報のみ", async () => {
+      await expect(svc.createTask(pr, { title: " " })).rejects.toThrow("タイトル");
+      await expect(svc.createTask(pr, { title: "a", dueDate: "来週" })).rejects.toThrow("期限");
+      const t = await svc.createTask(pr, { title: "消す" });
+      await expect(svc.deleteTask(member, t.id)).rejects.toThrow("権限");
+      await svc.deleteTask(pr, t.id);
+      expect(await svc.tasks(member)).toHaveLength(0);
+    });
+  });
+
+  describe("アプリ内チャット", () => {
+    it("送ったメッセージが相手に届き、未読になる。開くと既読になる", async () => {
+      await svc.sendMessage(member, "u02", "こんにちは");
+      const other: User = { id: "u02", email: "", name: "", roles: [] };
+      expect(await svc.chatThreads(other)).toMatchObject([{ personId: "u01", unread: 1 }]);
+      const list = await svc.messages(other, "u01");
+      expect(list.map((m) => m.body)).toEqual(["こんにちは"]);
+      expect((await svc.chatThreads(other))[0].unread).toBe(0);
+      expect((await svc.chatThreads(member))[0]).toMatchObject({ personId: "u02", unread: 0 });
+    });
+
+    it("自分宛て・空・長すぎるメッセージは送れない", async () => {
+      await expect(svc.sendMessage(member, "u01", "x")).rejects.toThrow("自分");
+      await expect(svc.sendMessage(member, "u02", "  ")).rejects.toThrow("入力");
+      await expect(svc.sendMessage(member, "u02", "あ".repeat(501))).rejects.toThrow("500字");
+      await expect(svc.sendMessage(member, "nobody", "x")).rejects.toThrow("相手");
+    });
+
+    it("他の人同士の会話は見えない", async () => {
+      await svc.sendMessage(member, "u02", "ひみつ");
+      expect(await svc.messages(kaizenOwner, "u01")).toEqual([]);
+      expect(await svc.chatThreads(kaizenOwner)).toEqual([]);
+    });
+  });
+
+  describe("ギャラリー", () => {
+    it("写真つきのひとこと投稿が新しい順に並び、改善の声は含まれない", async () => {
+      const png = "data:image/png;base64,iVBORw0KGgo=";
+      await svc.createPost(member, { kind: "hitokoto", category: "できごと", body: "写真です", photoDataUrl: png });
+      await svc.createPost(member, { kind: "hitokoto", category: "できごと", body: "文字だけ" });
+      const g = await svc.gallery();
+      expect(g[0].caption).toBe("写真です"); // 最新が先頭
+      expect(g.map((x) => x.caption)).not.toContain("文字だけ");
+      expect(g.every((x) => x.url.length > 0)).toBe(true);
+    });
+  });
   describe("デモ表示用データ", () => {
     it("席が埋まり、デモ利用者の名刺は記入済みになる。デモ利用者自身は未着席", async () => {
       await svc.seedDemoState("demo");
@@ -106,6 +186,15 @@ describe("Service", () => {
       const seated = Object.values(floor.assignments).flat();
       expect(seated.length).toBeGreaterThanOrEqual(10);
       expect(seated).not.toContain("demo");
+    });
+
+    it("ギャラリーの写真、共有タスク、チャットの例が入り、2回呼んでも重複しない", async () => {
+      await svc.seedDemoState("demo");
+      await svc.seedDemoState("demo");
+      const demo: User = { id: "demo", email: "", name: "", roles: [] };
+      expect((await svc.gallery()).length).toBeGreaterThanOrEqual(4);
+      expect((await svc.tasks(demo)).filter((t) => t.id.startsWith("demo-"))).toHaveLength(3);
+      expect(await svc.chatThreads(demo)).toMatchObject([{ personId: "u02", unread: 1 }]);
     });
 
     it("声マップに全支店の投稿と、支店をまたぐ共同提案が出る", async () => {
@@ -188,13 +277,19 @@ describe("Service", () => {
       expect(next.profileCompleted).toBe(true);
     });
 
-    it("名刺では部署や氏名など編集不可の項目は変わらない", async () => {
-      const next = await svc.updateMe(member, { nickname: "けん", dept: "eng", fullName: "偽名" } as never);
+    it("氏名は本人が編集できる。部署など人事情報は変わらない", async () => {
+      const next = await svc.updateMe(member, { fullName: "山本 賢太", nickname: "けん", dept: "eng" } as never);
+      expect(next.fullName).toBe("山本 賢太");
       expect(next.nickname).toBe("けん");
       expect(next.dept).toBe("sales");
-      expect(next.fullName).toBe("山本 健太");
     });
 
+    it("氏名は必須。呼ばれたい名前は空でもよい", async () => {
+      await expect(svc.updateMe(member, { fullName: "  " })).rejects.toThrow("氏名");
+      const next = await svc.updateMe(member, { nickname: "" });
+      expect(next.nickname).toBe("");
+      expect(next.profileCompleted).toBe(true);
+    });
     it("アイコン画像を設定・削除できる", async () => {
       const png = "data:image/png;base64,iVBORw0KGgo=";
       const set = await svc.updateMe(member, { nickname: "けん", avatarUrl: png });

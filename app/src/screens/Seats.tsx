@@ -72,7 +72,7 @@ function FloorMap({ branchId }: { branchId: string }) {
                     <span className="num">{s.label}</span>
                     <div className="slots">
                       {occupants.map((p) => (
-                        <button key={p.id} onClick={() => openCard(p.id)} aria-label={`${p.nickname}さん`} className={p.id === me.id ? "me" : ""}>
+                        <button key={p.id} onClick={() => openCard(p.id)} aria-label={`${p.fullName}さん`} className={p.id === me.id ? "me" : ""}>
                           <Avatar person={p} size={22} />
                         </button>
                       ))}
@@ -96,9 +96,9 @@ function FloorMap({ branchId }: { branchId: string }) {
                 const p = pid ? people.get(pid) : undefined;
                 if (!p) return <div key={s.id} className="seat empty"><div className="av">＋</div><div className="muted">{s.label}</div></div>;
                 return (
-                  <button key={s.id} className={`seat ${isHit(p.id) ? "hit" : ""} ${p.id === me.id ? "me" : ""}`} onClick={() => openCard(p.id)} aria-label={`${s.label} ${p.nickname}さん`}>
+                  <button key={s.id} className={`seat ${isHit(p.id) ? "hit" : ""} ${p.id === me.id ? "me" : ""}`} onClick={() => openCard(p.id)} aria-label={`${s.label} ${p.fullName}さん`}>
                     <div style={{ display: "flex", justifyContent: "center", marginBottom: 3 }}><Avatar person={p} size={32} /></div>
-                    <div style={{ fontWeight: 700 }}>{p.nickname}</div>
+                    <div className="seat-name">{p.fullName}</div>
                     <div className="muted" style={{ fontSize: 9.5 }}>{s.label}</div>
                   </button>
                 );
@@ -177,7 +177,7 @@ function SeatConfigEditor({ branchId }: { branchId: string }) {
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>この拠点の座席管理者</div>
           {(admins.data ?? []).map((a) => (
             <div className="opt" key={a.id}>
-              <div>{a.nickname || a.fullName}さん</div>
+              <div>{a.fullName}さん</div>
               <button className="text-btn" onClick={async () => { await api.removeSeatAdmin(branchId, a.id); admins.reload(); }}>削除</button>
             </div>
           ))}
@@ -185,7 +185,7 @@ function SeatConfigEditor({ branchId }: { branchId: string }) {
             <select value={newAdminId} onChange={(e) => setNewAdminId(e.target.value)} style={{ flex: 1 }}>
               <option value="">追加する人を選ぶ</option>
               {(people.data ?? []).filter((p) => p.branchId === branchId).map((p) => (
-                <option key={p.id} value={p.id}>{p.nickname || p.fullName}</option>
+                <option key={p.id} value={p.id}>{p.fullName}</option>
               ))}
             </select>
             <button className="text-btn" disabled={!newAdminId} onClick={async () => { await api.addSeatAdmin(branchId, newAdminId); setNewAdminId(""); admins.reload(); }}>追加</button>

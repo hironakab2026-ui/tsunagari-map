@@ -17,6 +17,11 @@ export function VoiceMap() {
   const statOf = (id: string) => stats.find((s) => s.branchId === id)!;
   const linked = new Set(collaborations.flat());
   const pos = new Map(branches.map((b) => [b.id, b]));
+  const totalOf = (id: string) => {
+    const s = statOf(id);
+    return mode === "kaizen" ? s.kaizen : s.sales + s.eng + s.office;
+  };
+  const maxTotal = Math.max(1, ...branches.map((b) => totalOf(b.id)));
   const sel = selected ? statOf(selected) : null;
   const selBranch = selected ? pos.get(selected) : null;
 
@@ -37,18 +42,20 @@ export function VoiceMap() {
             if (mode === "cross" && !linked.has(b.id)) return <circle key={b.id} cx={b.mapX} cy={b.mapY} r={7} style={{ fill: "var(--oak-300)" }} />;
             const segs: [number, string][] = mode === "kaizen" ? [[s.kaizen, "var(--ai)"]] : [[s.sales, "var(--sales)"], [s.eng, "var(--eng)"], [s.office, "var(--office)"]];
             const total = segs.reduce((a, [v]) => a + v, 0);
-            const r = 8 + Math.sqrt(total) * 5;
+            // 円の大きさは、寄せられた声の数に応じて変える（いちばん多い拠点を最大にして、差がはっきり見えるようにする）
+            const r = total === 0 ? 8 : 10 + 25 * Math.pow(total / maxTotal, 0.75);
             return (
               <g key={b.id} className="map-bubble" onClick={() => setSelected(b.id)} style={{ cursor: "pointer", animationDelay: `${i * 70}ms` }} role="button" aria-label={`${b.name} 投稿${total}件`}>
                 {total === 0 ? <circle cx={b.mapX} cy={b.mapY} r={8} style={{ fill: "var(--oak-300)" }} /> : <Pie x={b.mapX} y={b.mapY} r={r} segs={segs} total={total} />}
                 <circle cx={b.mapX} cy={b.mapY} r={r} fill="transparent" stroke={selected === b.id ? "var(--ink)" : "#fff"} strokeWidth={selected === b.id ? 3 : 2} style={{ transition: "stroke-width .2s" }} />
+                {total > 0 && <text x={b.mapX} y={b.mapY + 5} textAnchor="middle" fontSize={r >= 20 ? 15 : 12} fontWeight={800} fill="#fff" stroke="rgba(36,27,20,.55)" strokeWidth={3} paintOrder="stroke">{total}</text>}
                 <text x={b.mapX} y={b.mapY + r + 13} textAnchor="middle" fontSize={12} fontWeight={700} style={{ fill: "var(--ink)" }}>{b.name}</text>
               </g>
             );
           })}
         </svg>
       </div>
-      <p className="muted" style={{ margin: "6px 2px 0" }}>位置は模式図です。円の大きさ＝投稿数、線＝営業とエンジニアの共同提案。</p>
+      <p className="muted" style={{ margin: "6px 2px 0" }}>位置は模式図です。円の大きさ・数字＝寄せられた声の数、線＝営業とエンジニアの共同提案。</p>
       <div className="sec-title">{selBranch ? `${selBranch.name}の声` : "拠点をタップ"}</div>
       {sel && selBranch ? <BranchDetail key={selBranch.id} stat={sel} branchId={selBranch.id} mode={mode} /> : <div className="panel muted">地図上の拠点を選ぶと、部門別の内訳と、その拠点の声が1件ずつ状態つきで表示されます。</div>}
     </>
@@ -122,7 +129,7 @@ function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: st
             <div className="post-head">
               <Avatar person={author} size={30} />
               <div>
-                <b>{p.kind === "official" ? "本部広報" : author ? `${author.nickname || author.fullName}さん` : "匿名"}</b><br />
+                <b>{p.kind === "official" ? "本部広報" : author ? `${author.fullName}さん` : "匿名"}</b><br />
                 <span className="muted">{new Date(p.createdAt).toLocaleDateString("ja-JP")} ・ {KIND_LABEL[p.kind]}</span>
               </div>
               <span className={`st-pill ${st.tone}`} style={{ marginLeft: "auto" }}>{st.label}</span>

@@ -7,5 +7,9 @@
 - 個人情報：お客様情報を扱う機能は追加しない。匿名投稿の投稿者IDは `AnonymousAudit` 以外に保存しない。
 - SharePoint はコレクションごとに `DocId`/`PartitionKey`/`Data`(JSON) の汎用スキーマ（`api/src/lib/store.ts`）。型定義（`shared/src/types.ts`）を変えても SharePoint 側のリスト列変更は不要。新しいコレクションを追加した場合のみ `api/src/lib/store.ts` の `COLLECTIONS` と `scripts/provision-sharepoint.mjs` の `LISTS` を更新する。
 - `STORE=sqlite`（`api/src/lib/store.ts` の `SqliteStore`）は、Microsoft 365 アカウントなしでローカルに実データベースを確認するための開発用ストア。`node:sqlite`（Node.js 組み込み、実行時は `process.getBuiltinModule("node:sqlite")` 経由で読み込む。Vite/Vitest が新しい組み込みモジュールを解決できず静的 import だと失敗するため）。型は `api/src/lib/sqlite-node-types.d.ts` に自前定義している（`@types/node` は Node 20 系のため）。本番は `STORE=sharepoint` を使う。
+- 表示名は本名（`fullName`）。`nickname`（呼ばれたい名前）は名刺の自己紹介欄だけに出し、座席表・投稿・チャットには使わない。
+- オンライン表示：`Person.lastSeenAt`（アプリを開いている間の心拍）が5分以内、または今日着席中なら `online`（`shared/src/presence.ts`）。
+- 共有タスクは `Tasks`、アプリ内チャットは `Messages` コレクション（チャットは会話内容が入るため、SharePoint ではアクセス権を管理者に限定すること）。
+- `app/public/mascot/`・`app/public/gallery/` には、トヨタユナイテッドのマスコット（チャウピー・チャウニー）の画像を置いている。社外に公開するリポジトリ・サイトに載せる前に、利用許可を確認すること。
 - 本番接続・Azure構築の手順は `docs/DEPLOYMENT.md`。実際のテナント操作はユーザー側で行う（Claude はスクリプト・IaCの整備までを行う）。
 - `scripts/package-teams-app.mjs` は Windows でも動くよう、zip作成に外部ライブラリではなく `scripts/lib/zip.mjs`（依存なしの自前実装）を使っている。`archiver` 等のサードパーティ zip ライブラリは、この環境（OneDrive配下のパス）で Node のネイティブクラッシュを起こすことを確認済みなので使わない。

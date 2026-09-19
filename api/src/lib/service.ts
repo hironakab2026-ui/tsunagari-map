@@ -1,8 +1,8 @@
 import {
   DEFAULT_ROUTING_RULES, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS,
-  aggregateVoiceMap, buildSeatsFromConfig, detectPii, drawSeat, routeKaizen,
-  type Branch, type KaizenStatus, type Person, type Post, type PostKind,
-  type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy,
+  CHAT_MAX_LENGTH, aggregateVoiceMap, buildSeatsFromConfig, detectPii, drawSeat, isOnline, routeKaizen, threadIdOf,
+  type Branch, type ChatMessage, type ChatThread, type KaizenStatus, type Person, type Post, type PostKind,
+  type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy, type SharedTask,
 } from "@tsunagari/shared";
 import { randomUUID } from "node:crypto";
 import { HttpError, requireRole, type User } from "./auth.js";
@@ -11,7 +11,7 @@ import type { DocStore } from "./store.js";
 
 interface AuditDoc { postId: string; authorId: string; createdAt: string }
 
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["fullName", "nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
 const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const AVATAR_MAX_LENGTH = 200_000; // data URL の文字数。256px角に切り抜いた JPEG なら 30〜50KB 程度
 const MEDIA_PATTERN = /^data:((?:image\/(?:png|jpeg))|(?:video\/(?:mp4|webm)));base64,(.+)$/;
@@ -50,7 +50,10 @@ export class Service {
     const me = await this.me(user);
     const next = { ...me };
     for (const k of EDITABLE_PROFILE) if (k in patch) (next as Record<string, unknown>)[k] = patch[k];
-    if (!next.nickname?.trim()) throw new HttpError(400, "呼ばれたい名前を入力してください");
+    next.fullName = (next.fullName ?? "").trim();
+    if (!next.fullName) throw new HttpError(400, "氏名を入力してください");
+    if (next.fullName.length > 30) throw new HttpError(400, "氏名は30字以内で入力してください");
+    next.nickname = (next.nickname ?? "").trim().slice(0, 12); // 自己紹介の一項目。空でもよい
     next.skills = (next.skills ?? []).slice(0, 5).map((s) => s.slice(0, 20));
     if (next.avatarUrl) {
       if (next.avatarUrl.length > AVATAR_MAX_LENGTH) throw new HttpError(400, "アイコン画像が大きすぎます。別の画像を選んでください");
@@ -63,10 +66,23 @@ export class Service {
     return next;
   }
 
-  /** 公開設定を反映した一覧。趣味を非公開にしている人の項目は返さない */
+  /** 公開設定を反映した一覧。趣味を非公開にしている人の項目は返さない。online は、最近アプリを開いている、または今日着席中の人 */
   async people(user: User) {
-    const all = await this.store.list<Person>("People");
-    return all.map((p) => (p.id === user.id || p.showPrivate ? p : { ...p, hobby: undefined }));
+    const [all, occupancy] = await Promise.all([this.store.list<Person>("People"), this.store.list<SeatOccupancy>("Assignments")]);
+    const today = todayJst();
+    const seated = new Set(occupancy.filter((o) => o.date === today).flatMap((o) => o.personIds));
+    const now = Date.now();
+    return all.map((p) => {
+      const shown = p.id === user.id || p.showPrivate ? p : { ...p, hobby: undefined };
+      return { ...shown, online: p.id === user.id || seated.has(p.id) || isOnline(p.lastSeenAt, now) };
+    });
+  }
+
+  /** アプリを開いている間、定期的に呼ばれる。最終利用時刻を更新する（書き込みを減らすため、1分以内は更新しない） */
+  async heartbeat(user: User) {
+    const me = await this.me(user);
+    if (me.lastSeenAt && Date.now() - new Date(me.lastSeenAt).getTime() < 60_000) return;
+    await this.store.put("People", me.id, me.branchId, { ...me, lastSeenAt: new Date().toISOString() });
   }
 
   async branches() {
@@ -228,6 +244,100 @@ export class Service {
     return n;
   }
 
+  // ---------- 共有タスク（全体へのアナウンス） ----------
+  /** 新しい順。total は完了率の分母（登録されている人数） */
+  async tasks(user: User) {
+    const [list, people] = await Promise.all([this.store.list<SharedTask>("Tasks"), this.store.list<Person>("People")]);
+    const total = people.length;
+    return list
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50)
+      .map((t) => ({ ...t, doneBy: undefined, doneCount: t.doneBy.length, done: t.doneBy.includes(user.id), total }));
+  }
+
+  async createTask(user: User, input: { title: string; body?: string; dueDate?: string }) {
+    requireRole(user, "PR");
+    const title = (input.title ?? "").trim();
+    if (!title) throw new HttpError(400, "タイトルを入力してください");
+    if (title.length > 60) throw new HttpError(400, "タイトルは60字以内にしてください");
+    const body = (input.body ?? "").trim();
+    if (body.length > 300) throw new HttpError(400, "詳細は300字以内にしてください");
+    if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new HttpError(400, "期限の日付が正しくありません");
+    const task: SharedTask = {
+      id: randomUUID(), title, ...(body ? { body } : {}), ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+      createdBy: user.id, createdAt: new Date().toISOString(), doneBy: [],
+    };
+    await this.store.put("Tasks", task.id, "all", task);
+    return task;
+  }
+
+  /** 自分の「完了」をつけ外しする */
+  async setTaskDone(user: User, taskId: string, done: boolean) {
+    const task = await this.store.get<SharedTask>("Tasks", taskId);
+    if (!task) throw new HttpError(404, "タスクが見つかりません");
+    const doneBy = task.doneBy.filter((id) => id !== user.id);
+    if (done) doneBy.push(user.id);
+    await this.store.put("Tasks", taskId, "all", { ...task, doneBy });
+  }
+
+  async deleteTask(user: User, taskId: string) {
+    requireRole(user, "PR");
+    await this.store.remove("Tasks", taskId);
+  }
+
+  // ---------- アプリ内チャット（1対1） ----------
+  async sendMessage(user: User, toId: string, body: string) {
+    const me = await this.me(user);
+    if (toId === me.id) throw new HttpError(400, "自分には送れません");
+    if (!(await this.store.get<Person>("People", toId))) throw new HttpError(404, "相手が見つかりません");
+    const text = (body ?? "").trim();
+    if (!text) throw new HttpError(400, "メッセージを入力してください");
+    if (text.length > CHAT_MAX_LENGTH) throw new HttpError(400, `${CHAT_MAX_LENGTH}字以内で入力してください`);
+    const threadId = threadIdOf(me.id, toId);
+    const msg: ChatMessage = { id: `${Date.now()}-${randomUUID().slice(0, 8)}`, threadId, fromId: me.id, toId, body: text, createdAt: new Date().toISOString() };
+    await this.store.put("Messages", msg.id, threadId, msg);
+    return msg;
+  }
+
+  /** 相手との会話を古い順に返す。自分宛ての未読は、ここで既読にする */
+  async messages(user: User, withId: string) {
+    const list = (await this.store.list<ChatMessage>("Messages", threadIdOf(user.id, withId))).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const now = new Date().toISOString();
+    for (const m of list) {
+      if (m.toId === user.id && !m.readAt) {
+        m.readAt = now;
+        await this.store.put("Messages", m.id, m.threadId, m);
+      }
+    }
+    return list.slice(-200);
+  }
+
+  /** 自分が関わる会話の一覧（新しい順）。unread は自分宛ての未読数 */
+  async chatThreads(user: User): Promise<ChatThread[]> {
+    const all = (await this.store.list<ChatMessage>("Messages")).filter((m) => m.fromId === user.id || m.toId === user.id);
+    const byPeer = new Map<string, ChatThread>();
+    for (const m of all) {
+      const peer = m.fromId === user.id ? m.toId : m.fromId;
+      const cur = byPeer.get(peer) ?? { personId: peer, last: m, unread: 0 };
+      if (m.createdAt > cur.last.createdAt) cur.last = m;
+      if (m.toId === user.id && !m.readAt) cur.unread++;
+      byPeer.set(peer, cur);
+    }
+    return [...byPeer.values()].sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt));
+  }
+
+  // ---------- ギャラリー ----------
+  /** 投稿された写真（ひとこと・公式）を新しい順に。ホームのスライドショー用 */
+  async gallery() {
+    const posts = await this.store.list<Post>("Posts");
+    return posts
+      .flatMap((p) => {
+        const url = p.photoUrl ?? (p.mediaType === "image" ? p.mediaUrl : undefined);
+        return url && p.kind !== "kaizen" ? [{ id: p.id, url, caption: p.body, authorId: p.authorId, createdAt: p.createdAt }] : [];
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 20);
+  }
   // ---------- 声 ----------
   async posts(kind: PostKind) {
     const list = await this.store.list<Post>("Posts", kind);
@@ -364,6 +474,7 @@ export class Service {
       await this.store.put("People", demo.id, demo.branchId, demo);
     }
     await this.seedDemoVoices();
+    await this.seedDemoExtras(demoUserId);
     if ((await this.occupancyToday("hq")).size > 0) return;
     const today = todayJst();
     const seatByNumber = new Map(SEED_SEATS.map((s) => [s.number, s]));
@@ -382,6 +493,37 @@ export class Service {
       await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
         branchId: seat.branchId, seatId: seat.id, date: today, personIds,
       });
+    }
+  }
+
+  /** デモ表示用：ギャラリーの写真つき投稿、共有タスク、チャットの例。すでに入っていれば何もしない */
+  private async seedDemoExtras(demoUserId: string) {
+    if (await this.store.get<Post>("Posts", "demo-g01")) return;
+    const now = Date.now();
+    const photos: [string, string, string, string, string, number][] = [
+      ["g01", "u05", "hq", "/gallery/room.jpg", "朝礼のあと、休憩スペースの飾りつけをしました。", 1],
+      ["g02", "v01", "a", "/gallery/sakura.jpg", "店の前の桜が満開です。お客様も足を止めてくれます。", 2],
+      ["g03", "v03", "b", "/gallery/shelf.jpg", "展示コーナーの模様替え。ミニカーも並べました。", 3],
+      ["g04", "u12", "hq", "/gallery/poster.jpg", "交通安全ポスターを貼りました。止まろう、横断歩道！", 4],
+    ];
+    const depts = new Map([...SEED_PEOPLE].map((p) => [p.id, p.dept]));
+    for (const [id, authorId, branchId, photoUrl, body, daysAgo] of photos) {
+      const post: Post = {
+        id: `demo-${id}`, kind: "hitokoto", authorId, authorDept: depts.get(authorId) ?? "sales", branchId, category: "できごと",
+        body, photoUrl, createdAt: new Date(now - daysAgo * 86400_000).toISOString(), reactions: 5 + daysAgo,
+      };
+      await this.store.put("Posts", post.id, "hitokoto", post);
+    }
+    const tasks: SharedTask[] = [
+      { id: "demo-t1", title: "安全運転講習の受講報告を提出してください", body: "受講した日と講習名を、業務部のフォームから送ってください。", dueDate: todayJst(11), createdBy: "u05", createdAt: new Date(now - 2 * 86400_000).toISOString(), doneBy: ["u01", "u02", "u04", "u07"] },
+      { id: "demo-t2", title: "来月の有給休暇の予定を入力しましょう", dueDate: todayJst(5), createdBy: "u05", createdAt: new Date(now - 1 * 86400_000).toISOString(), doneBy: ["u03", "u10"] },
+      { id: "demo-t3", title: "避難訓練を実施します（詳細は各店の掲示をご確認ください）", createdBy: "u05", createdAt: new Date(now - 6 * 86400_000).toISOString(), doneBy: ["u01", "u02", "u03", "u04", "u06", "u07", "u08", "u09", "u10", "u11"] },
+    ];
+    for (const t of tasks) await this.store.put("Tasks", t.id, "all", t);
+    if (await this.store.get<Person>("People", "u02")) {
+      const threadId = threadIdOf("u02", demoUserId);
+      const m: ChatMessage = { id: "demo-c01", threadId, fromId: "u02", toId: demoUserId, body: "こんにちは！サービス部のみさきです。点検の説明資料、あとで送りますね。", createdAt: new Date(now - 3600_000).toISOString() };
+      await this.store.put("Messages", m.id, threadId, m);
     }
   }
 

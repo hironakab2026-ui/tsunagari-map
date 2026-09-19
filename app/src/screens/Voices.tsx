@@ -37,18 +37,20 @@ export function Voices({ composeOpen, setComposeOpen }: { composeOpen: boolean; 
   const all = posts.data ?? [];
   const filtered = useMemo(() => filterPosts(all, filter, {
     meId: me.id,
-    authorName: (id) => { const p = id ? people.get(id) : undefined; return p ? `${p.nickname} ${p.fullName}` : "匿名"; },
+    authorName: (id) => { const p = id ? people.get(id) : undefined; return p ? p.fullName : "匿名"; },
     branchName: (id) => branchName.get(id) ?? id,
   }), [all, filter, me.id, people, branches.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = filtered.slice(0, limit);
 
   return (
     <>
-      <Segmented value={kind} onChange={changeKind} options={(Object.keys(TAB_LABEL) as PostKind[]).map((k) => [k, TAB_LABEL[k]])} />
-      <PostFilterBar
-        kind={kind} categories={CATEGORIES[kind]} branches={branches.data ?? []} filter={filter}
-        open={panelOpen} onOpenChange={setPanelOpen} onChange={change} onClear={clear} shown={filtered.length} total={all.length}
-      />
+      <div className="sticky-head">
+        <Segmented value={kind} onChange={changeKind} options={(Object.keys(TAB_LABEL) as PostKind[]).map((k) => [k, TAB_LABEL[k]])} />
+        <PostFilterBar
+          kind={kind} categories={CATEGORIES[kind]} branches={branches.data ?? []} filter={filter}
+          open={panelOpen} onOpenChange={setPanelOpen} onChange={change} onClear={clear} shown={filtered.length} total={all.length}
+        />
+      </div>
       {posts.loading && !posts.data ? <Loading /> : <ErrorBox error={posts.error} />}
       {!posts.loading && all.length === 0 && <div className="panel muted">{kind === "official" ? "まだ公式ニュースはありません。" : "まだ投稿がありません。右下の「投稿する」から最初のひとことをどうぞ。"}</div>}
       {!posts.loading && all.length > 0 && filtered.length === 0 && (
@@ -90,12 +92,12 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
     <article className="post">
       <div className="post-head">
         {post.kind === "official" ? (
-          <div className="av" style={{ background: "var(--ai)" }}>公式</div>
+          <div className="av av-official">公式</div>
         ) : (
-          <button onClick={() => author && openCard(author.id)} aria-label={author ? `${author.nickname}さんの名刺` : "匿名"}><Avatar person={author} size={30} /></button>
+          <button onClick={() => author && openCard(author.id)} aria-label={author ? `${author.fullName}さんの名刺` : "匿名"}><Avatar person={author} size={30} /></button>
         )}
         <div>
-          <b>{post.kind === "official" ? "本部広報" : author ? `${author.nickname}さん` : "匿名"}</b><br />
+          <b>{post.kind === "official" ? "本部広報" : author ? `${author.fullName}さん` : "匿名"}</b><br />
           <span className="muted">
             {post.kind === "official" ? "公式アカウント" : author ? DEPT_LABEL[author.dept] : "部門非表示"} ・ {new Date(post.createdAt).toLocaleDateString("ja-JP")}
             {post.kind === "kaizen" && branchName.get(post.branchId) && ` ・ ${branchName.get(post.branchId)}`}

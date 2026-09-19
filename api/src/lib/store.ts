@@ -28,7 +28,7 @@ export interface DocStore {
 
 export const COLLECTIONS = [
   "People", "Branches", "Seats", "Assignments",
-  "Posts", "Reactions", "AnonymousAudit", "RoutingRules",
+  "Posts", "Reactions", "Tasks", "Messages", "AnonymousAudit", "RoutingRules",
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 

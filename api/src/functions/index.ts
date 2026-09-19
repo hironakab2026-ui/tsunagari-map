@@ -32,6 +32,23 @@ app.http("status", { methods: ["PATCH"], route: "posts/{id}/status", authLevel: 
 app.http("pick", { methods: ["POST"], route: "posts/{id}/pick", authLevel: "anonymous", handler: route(async ({ req, user, svc }) => { await svc.pickForNews(user, req.params.id); }) });
 app.http("voiceMap", { methods: ["GET"], route: "voice-map", authLevel: "anonymous", handler: route(({ svc }) => svc.voiceMap()) });
 
+// オンライン表示（アプリを開いている間、定期的に呼ばれる）
+app.http("presence", { methods: ["POST"], route: "presence", authLevel: "anonymous", handler: route(async ({ user, svc }) => { await svc.heartbeat(user); }) });
+
+// 共有タスク（全体へのアナウンス。作成・削除は広報）
+app.http("tasks", { methods: ["GET"], route: "tasks", authLevel: "anonymous", handler: route(({ user, svc }) => svc.tasks(user)) });
+app.http("createTask", { methods: ["POST"], route: "tasks", authLevel: "anonymous", handler: route(({ user, svc, body }) => svc.createTask(user, body)) });
+app.http("taskDone", { methods: ["POST"], route: "tasks/{id}/done", authLevel: "anonymous", handler: route(async ({ req, user, svc, body }) => { await svc.setTaskDone(user, req.params.id, !!body?.done); }) });
+app.http("deleteTask", { methods: ["DELETE"], route: "tasks/{id}", authLevel: "anonymous", handler: route(async ({ req, user, svc }) => { await svc.deleteTask(user, req.params.id); }) });
+
+// アプリ内チャット（1対1）
+app.http("chats", { methods: ["GET"], route: "chats", authLevel: "anonymous", handler: route(({ user, svc }) => svc.chatThreads(user)) });
+app.http("chatMessages", { methods: ["GET"], route: "chats/{personId}", authLevel: "anonymous", handler: route(({ req, user, svc }) => svc.messages(user, req.params.personId)) });
+app.http("sendChat", { methods: ["POST"], route: "chats/{personId}", authLevel: "anonymous", handler: route(({ req, user, svc, body }) => svc.sendMessage(user, req.params.personId, body?.body)) });
+
+// ギャラリー（投稿された写真）
+app.http("gallery", { methods: ["GET"], route: "gallery", authLevel: "anonymous", handler: route(({ svc }) => svc.gallery()) });
+
 // 写真（認証付きで配信）
 app.http("photo", {
   methods: ["GET"], route: "photos/{name}", authLevel: "anonymous",

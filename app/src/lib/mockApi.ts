@@ -3,13 +3,17 @@ import {
   aggregateVoiceMap, buildSeatsFromConfig, drawSeat, routeKaizen,
   type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig,
 } from "@tsunagari/shared";
-import type { Api, FloorView, NewPost } from "./api";
+import { threadIdOf, type ChatMessage, type ChatThread, type SharedTask } from "@tsunagari/shared";
+import type { Api, FloorView, GalleryItem, NewPost, TaskView } from "./api";
 
 // URL に ?mockUser=u13 を付けると、その人としてログインした状態を試せる（初回ログイン導線や権限の確認用）
 const ME = new URLSearchParams(location.search).get("mockUser") ?? "u05";
 const ADMIN_ROLES = ["SeatManager", "PR", "KaizenOwner"];
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["fullName", "nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "avatarUrl"];
 
+const mockDate = (offsetDays: number) => new Date(Date.now() + offsetDays * 86400_000).toISOString().slice(0, 10);
+/** モックでは、この人たちは常にオンライン（着席中の人と自分もオンライン） */
+const MOCK_ONLINE = new Set(["u02", "u07", "u11"]);
 const wait = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 const clone = <T,>(v: T): T => structuredClone(v);
 
@@ -22,6 +26,14 @@ export class MockApi implements Api {
     this.branchesData.map((b) => [b.id, buildSeatsFromConfig(b.id, b.id === "hq" ? "2F" : "1F", b.seatConfig)]),
   );
   private occupancy: Record<string, string[]> = {};
+  private tasksData: SharedTask[] = [
+    { id: "t1", title: "安全運転講習の受講報告を提出してください", body: "受講した日と講習名を、業務部のフォームから送ってください。", dueDate: mockDate(11), createdBy: "u05", createdAt: new Date(Date.now() - 2 * 86400_000).toISOString(), doneBy: ["u01", "u02", "u04", "u07"] },
+    { id: "t2", title: "来月の有給休暇の予定を入力しましょう", dueDate: mockDate(5), createdBy: "u05", createdAt: new Date(Date.now() - 86400_000).toISOString(), doneBy: ["u03", "u10"] },
+    { id: "t3", title: "避難訓練を実施します（詳細は各店の掲示をご確認ください）", createdBy: "u05", createdAt: new Date(Date.now() - 6 * 86400_000).toISOString(), doneBy: ["u01", "u02", "u03", "u04", "u06", "u07", "u08", "u09", "u10", "u11"] },
+  ];
+  private messagesData: ChatMessage[] = [
+    { id: "c1", threadId: threadIdOf("u02", ME), fromId: "u02", toId: ME, body: "こんにちは！サービス部のみさきです。点検の説明資料、あとで送りますね。", createdAt: new Date(Date.now() - 3600_000).toISOString() },
+  ];
 
   constructor() {
     // デモ用：本社のグループ席の1つに2人ほど着席させておく
@@ -50,13 +62,20 @@ export class MockApi implements Api {
     const i = this.peopleData.findIndex((p) => p.id === ME);
     const next = { ...this.peopleData[i] };
     for (const k of EDITABLE_PROFILE) if (k in patch) (next as Record<string, unknown>)[k] = (patch as Record<string, unknown>)[k];
+    next.fullName = (next.fullName ?? "").trim();
+    if (!next.fullName) throw new Error("氏名を入力してください");
+    next.nickname = (next.nickname ?? "").trim();
     next.skills = (next.skills ?? []).slice(0, 5).map((s) => s.slice(0, 20));
     if (!next.avatarUrl) delete next.avatarUrl;
     next.profileCompleted = true;
     this.peopleData[i] = next;
     return { ...clone(next), roles: this.roles() };
   }
-  async people() { await wait(); return clone(this.peopleData); }
+  async people() {
+    await wait();
+    const seated = new Set(Object.values(this.occupancy).flat());
+    return clone(this.peopleData.map((p) => ({ ...p, online: p.id === ME || seated.has(p.id) || MOCK_ONLINE.has(p.id) })));
+  }
   async branches() { await wait(); return clone(this.branchesData); }
 
   async floor(branchId?: string): Promise<FloorView> {
@@ -183,5 +202,82 @@ export class MockApi implements Api {
     view.stats.forEach((s) => (s.latest = latest.has(s.branchId) ? [latest.get(s.branchId)!] : []));
     view.collaborations.push(["a", "c"], ["hq", "a"]);
     return clone(view);
+  }
+
+  async heartbeat() { /* モックでは何もしない */ }
+
+  async gallery(): Promise<GalleryItem[]> {
+    await wait();
+    return clone(
+      this.postsData
+        .flatMap((p) => {
+          const url = p.photoUrl ?? (p.mediaType === "image" ? p.mediaUrl : undefined);
+          return url && p.kind !== "kaizen" ? [{ id: p.id, url, caption: p.body, authorId: p.authorId, createdAt: p.createdAt }] : [];
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 20),
+    );
+  }
+
+  async tasks(): Promise<TaskView[]> {
+    await wait();
+    const total = this.peopleData.length;
+    return clone([...this.tasksData]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(({ doneBy, ...t }) => ({ ...t, done: doneBy.includes(ME), doneCount: doneBy.length, total })));
+  }
+  async createTask(input: { title: string; body?: string; dueDate?: string }) {
+    await wait();
+    if (!this.roles().includes("PR")) throw new Error("この操作を行う権限がありません");
+    const title = input.title.trim();
+    if (!title) throw new Error("タイトルを入力してください");
+    this.tasksData.unshift({
+      id: `t${Date.now()}`, title, ...(input.body?.trim() ? { body: input.body.trim() } : {}), ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+      createdBy: ME, createdAt: new Date().toISOString(), doneBy: [],
+    });
+  }
+  async setTaskDone(taskId: string, done: boolean) {
+    await wait(60);
+    const t = this.tasksData.find((x) => x.id === taskId);
+    if (!t) throw new Error("タスクが見つかりません");
+    t.doneBy = t.doneBy.filter((id) => id !== ME);
+    if (done) t.doneBy.push(ME);
+  }
+  async deleteTask(taskId: string) {
+    await wait();
+    if (!this.roles().includes("PR")) throw new Error("この操作を行う権限がありません");
+    this.tasksData = this.tasksData.filter((t) => t.id !== taskId);
+  }
+
+  async chatThreads(): Promise<ChatThread[]> {
+    await wait(60);
+    const byPeer = new Map<string, ChatThread>();
+    for (const m of this.messagesData.filter((x) => x.fromId === ME || x.toId === ME)) {
+      const peer = m.fromId === ME ? m.toId : m.fromId;
+      const cur = byPeer.get(peer) ?? { personId: peer, last: m, unread: 0 };
+      if (m.createdAt > cur.last.createdAt) cur.last = m;
+      if (m.toId === ME && !m.readAt) cur.unread++;
+      byPeer.set(peer, cur);
+    }
+    return clone([...byPeer.values()].sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt)));
+  }
+  async chatMessages(personId: string) {
+    await wait(60);
+    const list = this.messagesData.filter((m) => m.threadId === threadIdOf(ME, personId)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const m of list) if (m.toId === ME && !m.readAt) m.readAt = new Date().toISOString();
+    return clone(list);
+  }
+  async sendChat(personId: string, body: string) {
+    await wait(60);
+    const text = body.trim();
+    if (!text) throw new Error("メッセージを入力してください");
+    if (text.length > 500) throw new Error("500字以内で入力してください");
+    const msg: ChatMessage = { id: `m${Date.now()}`, threadId: threadIdOf(ME, personId), fromId: ME, toId: personId, body: text, createdAt: new Date().toISOString() };
+    this.messagesData.push(msg);
+    // モックでは、相手が少ししてから返信したことにして、やり取りの流れを確かめられるようにする
+    setTimeout(() => {
+      this.messagesData.push({ id: `m${Date.now()}r`, threadId: msg.threadId, fromId: personId, toId: ME, body: "メッセージありがとうございます。あとで確認して返信しますね。", createdAt: new Date().toISOString() });
+    }, 2500);
+    return clone(msg);
   }
 }

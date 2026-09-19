@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { getSsoToken } from "../lib/teams";
 
 /** 動画を再生する。自社APIに置いた動画は認証が要るため、取得して blob URL にして渡す。外部の https リンクはそのまま再生する */
-export function AuthVideo({ src }: { src: string }) {
+export function AuthVideo({ src, onError }: { src: string; onError?: () => void }) {
   const own = src.startsWith("/api/");
   const [url, setUrl] = useState<string | null>(own ? null : src);
   const [failed, setFailed] = useState(false);
+  useEffect(() => { if (failed) onError?.(); }, [failed]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!own) { setUrl(src); return; }
     let revoked: string | null = null;
@@ -26,5 +27,5 @@ export function AuthVideo({ src }: { src: string }) {
   }, [src, own]);
   if (failed) return <div className="muted">動画を読み込めませんでした。時間をおいて開き直してください。</div>;
   if (!url) return <div className="muted">動画を読み込んでいます…</div>;
-  return <video className="post-video" src={url} controls playsInline preload="metadata" />;
+  return <video className="post-video" src={url} controls playsInline preload="metadata" onError={() => setFailed(true)} />;
 }

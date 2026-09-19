@@ -33,6 +33,7 @@ export function MyCard() {
 }
 
 function EditCard({ me, onSave, onCancel }: { me: Person; onSave: (p: Partial<Person>) => Promise<void>; onCancel: () => void }) {
+  const [fullName, setFullName] = useState(me.fullName);
   const [nickname, setNickname] = useState(me.nickname);
   const [skills, setSkills] = useState(me.skills.join("、"));
   const [hobby, setHobby] = useState(me.hobby ?? "");
@@ -45,18 +46,18 @@ function EditCard({ me, onSave, onCancel }: { me: Person; onSave: (p: Partial<Pe
     try { setAvatarUrl(await cropToSquareDataUrl(file)); } catch (e) { setError(e); }
   };
   const submit = async () => {
-    if (!nickname.trim()) return setError(new Error("呼ばれたい名前を入力してください"));
+    if (!fullName.trim()) return setError(new Error("氏名を入力してください"));
     try {
-      await onSave({ nickname: nickname.trim(), skills: skills.split(/[、,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5), hobby: hobby.trim(), askMe: askMe.trim(), avatarUrl });
+      await onSave({ fullName: fullName.trim(), nickname: nickname.trim(), skills: skills.split(/[、,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5), hobby: hobby.trim(), askMe: askMe.trim(), avatarUrl });
     } catch (e) { setError(e); }
   };
   return (
     <div className="panel">
-      <div className="muted">{me.fullName} ・ {me.unit}（社員情報から自動入力）</div>
+      <div className="muted">{me.unit}（所属は社員情報から自動入力）</div>
       <div className="field">
         <label>アイコン</label>
         <div className="avatar-edit">
-          <Avatar person={{ nickname: nickname || me.nickname, dept: me.dept, avatarUrl }} size={64} />
+          <Avatar person={{ fullName: fullName || me.fullName, dept: me.dept, avatarUrl }} size={64} />
           <div>
             <label className="secondary avatar-pick">
               {avatarUrl ? "写真を変更" : "顔写真を選ぶ"}
@@ -66,7 +67,8 @@ function EditCard({ me, onSave, onCancel }: { me: Person; onSave: (p: Partial<Pe
           </div>
         </div>
       </div>
-      <div className="field"><label htmlFor="nn">呼ばれたい名前</label><input id="nn" value={nickname} maxLength={12} onChange={(e) => setNickname(e.target.value)} /></div>
+      <div className="field"><label htmlFor="fn">氏名（座席表・投稿などに表示されます）</label><input id="fn" value={fullName} maxLength={30} onChange={(e) => setFullName(e.target.value)} placeholder="例：山本 健太" /></div>
+      <div className="field"><label htmlFor="nn">呼ばれたい名前（自己紹介・任意）</label><input id="nn" value={nickname} maxLength={12} onChange={(e) => setNickname(e.target.value)} placeholder="例：けんた" /></div>
       <div className="field"><label htmlFor="sk">得意なこと（「、」区切りで5つまで）</label><input id="sk" value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="例：ハイブリッド診断、点検説明" /></div>
       <div className="field"><label htmlFor="hb">最近ハマっていること（任意）</label><input id="hb" value={hobby} maxLength={40} onChange={(e) => setHobby(e.target.value)} /></div>
       <div className="field"><label htmlFor="ak">こんなこと聞いてください</label><textarea id="ak" rows={3} value={askMe} maxLength={60} onChange={(e) => setAskMe(e.target.value)} /></div>

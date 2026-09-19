@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { DEPT_LABEL } from "@tsunagari/shared";
+import { DEPT_LABEL, pickTopics } from "@tsunagari/shared";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading } from "../components/common";
 import { BranchPicker } from "../components/BranchPicker";
+import { Gallery } from "../components/Gallery";
+import { NewsPanel } from "../components/NewsPanel";
+import { Tasks } from "../components/Tasks";
 
 export function Home() {
   const { me, people, openCard, dataVersion, bumpData, toast, workBranch: branchId, setWorkBranch: setBranchId } = useApp();
   const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
-  const kaizen = useAsync(() => api.posts("kaizen"), [dataVersion]);
   const news = useAsync(() => api.posts("hitokoto"), [dataVersion]);
   const official = useAsync(() => api.posts("official"), [dataVersion]);
+  const tasks = useAsync(() => api.tasks(), [dataVersion]);
   const [busy, setBusy] = useState(false);
   const [rolling, setRolling] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -27,9 +30,9 @@ export function Home() {
   const depts = [...new Set(neighbors.map((n) => DEPT_LABEL[n.dept]))].join("・");
   const totalCapacity = seats.reduce((n, s) => n + s.capacity, 0);
   const occupied = Object.values(assignments).reduce((n, ids) => n + ids.length, 0);
-  const picked = news.data?.find((p) => p.pickedForNews);
-  const latestOfficial = official.data?.[0];
-  const moving = kaizen.data?.find((p) => p.status === "inProgress");
+  // 支店ニュースのランダムは、日付と本人で固定する（画面を開き直しても急に変わらない）
+  const seed = [...`${new Date().toDateString()}${me.id}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const topics = pickTopics({ tasks: tasks.data ?? [], official: official.data ?? [], hitokoto: news.data ?? [], branchId: me.branchId, seed });
 
   // 抽選中は席番号がくるくる変わる演出を出す（結果が早く返っても、少し見せてから確定する）
   const draw = async () => {
@@ -87,20 +90,28 @@ export function Home() {
             {neighbors.map((n) => (
               <button key={n.id} onClick={() => openCard(n.id)}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}><Avatar person={n} /></div>
-                <div style={{ fontWeight: 700 }}>{n.nickname}さん</div>
+                <div style={{ fontWeight: 700 }}>{n.fullName}</div>
                 <div className="muted" style={{ fontSize: 10.5 }}>{n.skills[0] ?? n.unit}</div>
               </button>
             ))}
           </div>
         </>
       )}
-      <div className="sec-title">あなた向けの今日の3件</div>
-      <div className="panel">
-        {latestOfficial && <div className="feed-item"><span className="chip">公式</span><div><b>{latestOfficial.body.slice(0, 32)}</b><div className="muted">本部からのお知らせ</div></div></div>}
-        {picked && <div className="feed-item"><span className="chip">社内ニュース</span><div><b>{picked.body.slice(0, 32)}</b><div className="muted">ひとこと投稿から採用</div></div></div>}
-        {moving && <div className="feed-item"><span className="chip">改善</span><div>「{moving.body.slice(0, 20)}…」が<b>対応中</b>になりました</div></div>}
-        <div className="feed-item"><span className="chip">拠点</span><div>今日の{branch.name}には <b>{occupied}人</b> が着席しています</div></div>
-      </div>
-    </>
+      <Tasks />
+      <NewsPanel />
+      <Gallery />
+      {topics.length > 0 && (
+        <>
+          <div className="sec-head"><div className="sec-title">トピックス</div></div>
+          <div className="panel">
+            {topics.map((tp) => (
+              <div className="feed-item" key={tp.kind}>
+                <span className={`chip topic-${tp.kind}`}>{tp.label}</span>
+                <div><b>{tp.text}</b>{tp.sub && <div className="muted">{tp.sub}</div>}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}    </>
   );
 }

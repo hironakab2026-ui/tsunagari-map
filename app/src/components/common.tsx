@@ -7,21 +7,28 @@ export const DEPT_COLOR: Record<Dept, string> = {
   office: "var(--office)",
 };
 
-export function Avatar({ person, size = 40 }: { person: (Pick<Person, "nickname" | "dept"> & { avatarUrl?: string }) | null; size?: number }) {
+/** 顔写真・頭文字のアイコン。所属の色は縁に使い（写真の色とぶつからないように）、右下にオンライン（緑）／オフライン（灰）の印を出す */
+export function Avatar({ person, size = 40, presence = true }: {
+  person: (Pick<Person, "fullName" | "dept"> & { avatarUrl?: string; online?: boolean }) | null;
+  size?: number;
+  presence?: boolean;
+}) {
+  const ring = person ? DEPT_COLOR[person.dept] : "#B9B2A6";
+  const dot = Math.max(8, Math.round(size * 0.28));
+  const showDot = presence && person?.online !== undefined;
   return (
-    <div
-      className="av"
-      aria-hidden
-      style={{
-        background: person ? DEPT_COLOR[person.dept] : "#9AA2AD",
-        width: size, height: size, fontSize: Math.round(size * 0.38), margin: 0,
-      }}
-    >
-      {person?.avatarUrl ? <img src={person.avatarUrl} alt="" className="av-img" /> : person?.nickname ? person.nickname.slice(0, 1) : "？"}
-    </div>
+    <span className="av-wrap" style={{ width: size, height: size }}>
+      <span
+        className="av"
+        aria-hidden
+        style={{ ["--ring" as string]: ring, width: size, height: size, fontSize: Math.round(size * 0.38), borderWidth: size < 28 ? 2 : 3 }}
+      >
+        {person?.avatarUrl ? <img src={person.avatarUrl} alt="" className="av-img" /> : person?.fullName ? person.fullName.slice(0, 1) : "？"}
+      </span>
+      {showDot && <i className={`presence ${person!.online ? "on" : "off"}`} style={{ width: dot, height: dot }} role="img" aria-label={person!.online ? "オンライン" : "オフライン"} />}
+    </span>
   );
 }
-
 export function DeptDot({ dept }: { dept: Dept }) {
   return <i className="dot" style={{ background: DEPT_COLOR[dept] }} title={DEPT_LABEL[dept]} />;
 }

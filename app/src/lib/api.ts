@@ -1,4 +1,4 @@
-import type { Branch, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig } from "@tsunagari/shared";
+import type { Branch, ChatMessage, ChatThread, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig, SharedTask } from "@tsunagari/shared";
 import { getSsoToken } from "./teams";
 import { MockApi } from "./mockApi";
 
@@ -21,6 +21,17 @@ export interface VoiceMapView {
   branches: Branch[];
   stats: BranchStat[];
   collaborations: [string, string][]; // 営業×エンジニア共同提案のあった拠点ペア
+}
+
+/** 共有タスク（一覧表示用）。完了した人の一覧は返さず、人数と自分の完了だけ返す */
+export type TaskView = Omit<SharedTask, "doneBy"> & { done: boolean; doneCount: number; total: number };
+
+export interface GalleryItem {
+  id: string;
+  url: string;
+  caption: string;
+  authorId: string | null;
+  createdAt: string;
 }
 
 export interface NewPost {
@@ -56,6 +67,16 @@ export interface Api {
   pickForNews(postId: string): Promise<void>;
   voiceMap(): Promise<VoiceMapView>;
   updateKaizenStatus(postId: string, status: KaizenStatus): Promise<void>;
+  /** アプリを開いている間、定期的に呼んでオンライン表示を保つ */
+  heartbeat(): Promise<void>;
+  gallery(): Promise<GalleryItem[]>;
+  tasks(): Promise<TaskView[]>;
+  createTask(t: { title: string; body?: string; dueDate?: string }): Promise<void>;
+  setTaskDone(taskId: string, done: boolean): Promise<void>;
+  deleteTask(taskId: string): Promise<void>;
+  chatThreads(): Promise<ChatThread[]>;
+  chatMessages(personId: string): Promise<ChatMessage[]>;
+  sendChat(personId: string, body: string): Promise<ChatMessage>;
 }
 
 class HttpApi implements Api {
@@ -99,6 +120,15 @@ class HttpApi implements Api {
   voiceMap = () => this.call<VoiceMapView>("/voice-map");
   updateKaizenStatus = (postId: string, status: KaizenStatus) =>
     this.call<void>(`/posts/${postId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+  heartbeat = () => this.call<void>("/presence", { method: "POST" });
+  gallery = () => this.call<GalleryItem[]>("/gallery");
+  tasks = () => this.call<TaskView[]>("/tasks");
+  createTask = (t: { title: string; body?: string; dueDate?: string }) => this.call<void>("/tasks", { method: "POST", body: JSON.stringify(t) });
+  setTaskDone = (taskId: string, done: boolean) => this.call<void>(`/tasks/${taskId}/done`, { method: "POST", body: JSON.stringify({ done }) });
+  deleteTask = (taskId: string) => this.call<void>(`/tasks/${taskId}`, { method: "DELETE" });
+  chatThreads = () => this.call<ChatThread[]>("/chats");
+  chatMessages = (personId: string) => this.call<ChatMessage[]>(`/chats/${personId}`);
+  sendChat = (personId: string, body: string) => this.call<ChatMessage>(`/chats/${personId}`, { method: "POST", body: JSON.stringify({ body }) });
 }
 
 export const api: Api =
