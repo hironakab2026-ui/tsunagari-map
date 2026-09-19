@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { DEPT_LABEL, KAIZEN_STATUS_LABEL, detectPii, routeKaizen, type Branch, type KaizenStatus, type Post, type PostKind } from "@tsunagari/shared";
+import { useMemo, useState } from "react";
+import { DEPT_LABEL, EMPTY_POST_FILTER, KAIZEN_STATUS_LABEL, detectPii, filterPosts, routeKaizen, type Branch, type KaizenStatus, type Post, type PostFilter, type PostKind } from "@tsunagari/shared";
+import { PostFilterBar } from "../components/PostFilterBar";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
@@ -16,20 +17,53 @@ const CATEGORIES: Record<PostKind, string[]> = {
 };
 const TAB_LABEL: Record<PostKind, string> = { hitokoto: "ひとこと", kaizen: "改善の声", official: "公式" };
 
+const PAGE_SIZE = 10;
+
 export function Voices({ composeOpen, setComposeOpen }: { composeOpen: boolean; setComposeOpen: (v: boolean) => void }) {
   const [kind, setKind] = useState<PostKind>("hitokoto");
-  const { me, dataVersion } = useApp();
+  const { me, people, dataVersion } = useApp();
   const posts = useAsync(() => api.posts(kind), [kind, dataVersion]);
   const branches = useAsync(() => api.branches(), []);
+  const [filter, setFilter] = useState<PostFilter>(EMPTY_POST_FILTER);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const branchName = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
   const isPR = !!me.roles?.some((r) => r === "PR" || r === "Admin");
 
+  const change = (patch: Partial<PostFilter>) => { setFilter((f) => ({ ...f, ...patch })); setLimit(PAGE_SIZE); };
+  const clear = () => { setFilter(EMPTY_POST_FILTER); setLimit(PAGE_SIZE); };
+  const changeKind = (k: PostKind) => { setKind(k); clear(); setPanelOpen(false); };
+
+  const all = posts.data ?? [];
+  const filtered = useMemo(() => filterPosts(all, filter, {
+    meId: me.id,
+    authorName: (id) => { const p = id ? people.get(id) : undefined; return p ? `${p.nickname} ${p.fullName}` : "匿名"; },
+    branchName: (id) => branchName.get(id) ?? id,
+  }), [all, filter, me.id, people, branches.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = filtered.slice(0, limit);
+
   return (
     <>
-      <Segmented value={kind} onChange={setKind} options={(Object.keys(TAB_LABEL) as PostKind[]).map((k) => [k, TAB_LABEL[k]])} />
-      {posts.loading ? <Loading /> : <ErrorBox error={posts.error} />}
-      {posts.data?.length === 0 && <div className="panel muted">{kind === "official" ? "まだ公式ニュースはありません。" : "まだ投稿がありません。右下の「投稿する」から最初のひとことをどうぞ。"}</div>}
-      {posts.data?.map((p) => <PostItem key={p.id} post={p} branchName={branchName} onChanged={posts.reload} />)}
+      <Segmented value={kind} onChange={changeKind} options={(Object.keys(TAB_LABEL) as PostKind[]).map((k) => [k, TAB_LABEL[k]])} />
+      <PostFilterBar
+        kind={kind} categories={CATEGORIES[kind]} branches={branches.data ?? []} filter={filter}
+        open={panelOpen} onOpenChange={setPanelOpen} onChange={change} onClear={clear} shown={filtered.length} total={all.length}
+      />
+      {posts.loading && !posts.data ? <Loading /> : <ErrorBox error={posts.error} />}
+      {!posts.loading && all.length === 0 && <div className="panel muted">{kind === "official" ? "まだ公式ニュースはありません。" : "まだ投稿がありません。右下の「投稿する」から最初のひとことをどうぞ。"}</div>}
+      {!posts.loading && all.length > 0 && filtered.length === 0 && (
+        <div className="panel empty-state">
+          <b>条件に合う投稿がありません</b>
+          <p className="muted">キーワードや条件を変えてみてください。</p>
+          <button type="button" className="secondary" onClick={clear}>条件をクリアする</button>
+        </div>
+      )}
+      {shown.map((p) => <PostItem key={p.id} post={p} branchName={branchName} onChanged={posts.reload} />)}
+      {filtered.length > shown.length && (
+        <button type="button" className="secondary more-btn" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
+          さらに{Math.min(PAGE_SIZE, filtered.length - shown.length)}件を表示（残り{filtered.length - shown.length}件）
+        </button>
+      )}
       <Sheet open={composeOpen} onClose={() => setComposeOpen(false)} label="投稿作成">
         {kind === "official" && !isPR ? (
           <p className="muted">公式ニュースの投稿は広報担当（PRロール）のみ行えます。</p>

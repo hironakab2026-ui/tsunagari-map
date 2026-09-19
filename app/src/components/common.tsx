@@ -61,7 +61,13 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 }
 
 export function Loading() {
-  return <div className="loading">読み込んでいます</div>;
+  return (
+    <div className="loading" role="status" aria-label="読み込んでいます">
+      <div className="skeleton" style={{ height: 96 }} />
+      <div className="skeleton" style={{ height: 64 }} />
+      <div className="skeleton" style={{ height: 64, width: "82%" }} />
+    </div>
+  );
 }
 
 export function ErrorBox({ error }: { error: unknown }) {

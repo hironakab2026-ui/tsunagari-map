@@ -21,7 +21,7 @@ function FloorMap() {
   const { me, people, openCard, dataVersion } = useApp();
   const [q, setQ] = useState("");
   const floor = useAsync(() => api.floor(me.branchId), [dataVersion]);
-  if (floor.loading) return <Loading />;
+  if (floor.loading && !floor.data) return <Loading />;
   if (floor.error || !floor.data) return <ErrorBox error={floor.error} />;
   const { seats, assignments, branch } = floor.data;
 

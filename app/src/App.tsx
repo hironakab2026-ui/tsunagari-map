@@ -35,6 +35,10 @@ export function App() {
   const [dataVersion, setDataVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const onboardingShown = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // タブを切り替えたら、画面の先頭から見せる
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0, behavior: "instant" }); }, [tab]);
 
   useEffect(() => {
     (async () => {
@@ -88,12 +92,14 @@ export function App() {
             着席
           </button>
         </header>
-        <main>
-          {tab === "home" && <Home />}
-          {tab === "seat" && <Seats />}
-          {tab === "voice" && <Voices composeOpen={composeOpen} setComposeOpen={setComposeOpen} />}
-          {tab === "map" && <VoiceMap />}
-          {tab === "card" && <MyCard />}
+        <main ref={mainRef}>
+          <div key={tab} className="screen-in">
+            {tab === "home" && <Home />}
+            {tab === "seat" && <Seats />}
+            {tab === "voice" && <Voices composeOpen={composeOpen} setComposeOpen={setComposeOpen} />}
+            {tab === "map" && <VoiceMap />}
+            {tab === "card" && <MyCard />}
+          </div>
         </main>
         {tab === "voice" && !composeOpen && <button className="fab" onClick={() => setComposeOpen(true)}>＋ 投稿する</button>}
         <nav className="tabs">

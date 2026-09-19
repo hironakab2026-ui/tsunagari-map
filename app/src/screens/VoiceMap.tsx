@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Post } from "@tsunagari/shared";
+import { postStatus, type Post, type PostStatusFilter } from "@tsunagari/shared";
 import { api, type BranchStat } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
@@ -11,7 +11,7 @@ export function VoiceMap() {
   const [mode, setMode] = useState<Mode>("all");
   const [selected, setSelected] = useState<string | null>(null);
   const q = useAsync(() => api.voiceMap(), []);
-  if (q.loading) return <Loading />;
+  if (q.loading && !q.data) return <Loading />;
   if (q.error || !q.data) return <ErrorBox error={q.error} />;
   const { branches, stats, collaborations } = q.data;
   const statOf = (id: string) => stats.find((s) => s.branchId === id)!;
@@ -25,24 +25,24 @@ export function VoiceMap() {
       <Segmented value={mode} onChange={(m) => setMode(m)} options={[["all", "すべて"], ["kaizen", "改善"], ["cross", "部門をこえた声"]]} />
       <div className="map-wrap">
         <svg viewBox="0 0 360 420" role="img" aria-label="拠点別の声のマップ">
-          <path d="M130 30 L205 25 L250 60 L260 120 L285 170 L290 250 L270 320 L230 380 L165 400 L105 370 L80 300 L90 230 L70 170 L85 100 Z" fill="#EEF2EA" stroke="#C9D3BF" strokeWidth={2} />
-          <text x={250} y={410} fontSize={11} fill="#8A93A0">奈良県（模式図）</text>
+          <path d="M130 30 L205 25 L250 60 L260 120 L285 170 L290 250 L270 320 L230 380 L165 400 L105 370 L80 300 L90 230 L70 170 L85 100 Z" style={{ fill: "var(--oak-100)", stroke: "var(--oak-300)" }} strokeWidth={2} />
+          <text x={250} y={410} fontSize={11} style={{ fill: "var(--muted)" }}>奈良県（模式図）</text>
           {mode !== "kaizen" && collaborations.filter(([a, b]) => a !== b).map(([a, b]) => {
             const A = pos.get(a), B = pos.get(b);
             if (!A || !B) return null;
             return <line key={`${a}-${b}`} x1={A.mapX} y1={A.mapY} x2={B.mapX} y2={B.mapY} stroke="var(--wakakusa)" strokeWidth={mode === "cross" ? 4 : 2.5} strokeDasharray={mode === "cross" ? undefined : "5 4"} opacity={0.8} />;
           })}
-          {branches.map((b) => {
+          {branches.map((b, i) => {
             const s = statOf(b.id);
-            if (mode === "cross" && !linked.has(b.id)) return <circle key={b.id} cx={b.mapX} cy={b.mapY} r={7} fill="#C5CBD2" />;
+            if (mode === "cross" && !linked.has(b.id)) return <circle key={b.id} cx={b.mapX} cy={b.mapY} r={7} style={{ fill: "var(--oak-300)" }} />;
             const segs: [number, string][] = mode === "kaizen" ? [[s.kaizen, "var(--ai)"]] : [[s.sales, "var(--sales)"], [s.eng, "var(--eng)"], [s.office, "var(--office)"]];
             const total = segs.reduce((a, [v]) => a + v, 0);
             const r = 8 + Math.sqrt(total) * 5;
             return (
-              <g key={b.id} onClick={() => setSelected(b.id)} style={{ cursor: "pointer" }} role="button" aria-label={`${b.name} 投稿${total}件`}>
-                {total === 0 ? <circle cx={b.mapX} cy={b.mapY} r={8} fill="#C5CBD2" /> : <Pie x={b.mapX} y={b.mapY} r={r} segs={segs} total={total} />}
-                <circle cx={b.mapX} cy={b.mapY} r={r} fill="transparent" stroke={selected === b.id ? "var(--ink)" : "#fff"} strokeWidth={2} />
-                <text x={b.mapX} y={b.mapY + r + 13} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1E2430">{b.name}</text>
+              <g key={b.id} className="map-bubble" onClick={() => setSelected(b.id)} style={{ cursor: "pointer", animationDelay: `${i * 70}ms` }} role="button" aria-label={`${b.name} 投稿${total}件`}>
+                {total === 0 ? <circle cx={b.mapX} cy={b.mapY} r={8} style={{ fill: "var(--oak-300)" }} /> : <Pie x={b.mapX} y={b.mapY} r={r} segs={segs} total={total} />}
+                <circle cx={b.mapX} cy={b.mapY} r={r} fill="transparent" stroke={selected === b.id ? "var(--ink)" : "#fff"} strokeWidth={selected === b.id ? 3 : 2} style={{ transition: "stroke-width .2s" }} />
+                <text x={b.mapX} y={b.mapY + r + 13} textAnchor="middle" fontSize={12} fontWeight={700} style={{ fill: "var(--ink)" }}>{b.name}</text>
               </g>
             );
           })}
@@ -72,20 +72,8 @@ function Pie({ x, y, r, segs, total }: { x: number; y: number; r: number; segs: 
   );
 }
 
-type Tone = "done" | "progress" | "shared" | "unshared";
-type Filter = "all" | Tone;
-
-/** 投稿の状態。改善の声は対応の進み具合、ひとこと投稿は社内ニュースで共有したかどうか */
-function statusOf(p: Post): { label: string; tone: Tone } {
-  if (p.kind === "kaizen") {
-    if (p.status === "done") return { label: "解決済み", tone: "done" };
-    if (p.status === "inProgress") return { label: "対応中", tone: "progress" };
-    if (p.status === "reviewing") return { label: "検討中", tone: "progress" };
-    return { label: "受付済み（未対応）", tone: "progress" };
-  }
-  if (p.kind === "official") return { label: "共有済み（公式）", tone: "shared" };
-  return p.pickedForNews ? { label: "共有済み（社内ニュース）", tone: "shared" } : { label: "まだ共有していない", tone: "unshared" };
-}
+type Filter = PostStatusFilter;
+const statusOf = postStatus;
 
 const KIND_LABEL = { hitokoto: "ひとこと", kaizen: "改善の声", official: "公式" } as const;
 const FILTERS: [Filter, string][] = [["all", "すべて"], ["done", "解決済み"], ["progress", "対応中"], ["shared", "共有済み"], ["unshared", "未共有"]];
