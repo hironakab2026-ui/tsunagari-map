@@ -92,9 +92,9 @@ export class MockApi implements Api {
   }
   async checkOut() { await wait(); this.removeFromCurrentSeat(); }
 
-  async draw() {
+  async draw(branchId?: string) {
     await wait(300);
-    const me = this.currentPerson();
+    const me = { ...this.currentPerson(), branchId: branchId || this.currentPerson().branchId };
     const seats = this.seatsByBranch.get(me.branchId)!;
     const others: Record<string, string[]> = {};
     for (const [id, ids] of Object.entries(this.occupancy)) others[id] = ids.filter((x) => x !== ME);

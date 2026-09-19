@@ -7,7 +7,16 @@ import { Avatar, ErrorBox, Loading } from "../components/common";
 
 export function Home() {
   const { me, people, openCard, dataVersion, bumpData, toast } = useApp();
-  const floor = useAsync(() => api.floor(me.branchId), [dataVersion]);
+  // 今日どの支店で働くか。抽選はこの支店の席から選ぶ（前回の選択を覚えておく）
+  const [branchId, setBranchIdState] = useState(() => {
+    try { return localStorage.getItem("workBranch") ?? me.branchId; } catch { return me.branchId; }
+  });
+  const setBranchId = (id: string) => {
+    setBranchIdState(id);
+    try { localStorage.setItem("workBranch", id); } catch { /* 保存できなくても動く */ }
+  };
+  const branches = useAsync(() => api.branches(), []);
+  const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
   const kaizen = useAsync(() => api.posts("kaizen"), [dataVersion]);
   const news = useAsync(() => api.posts("hitokoto"), [dataVersion]);
   const official = useAsync(() => api.posts("official"), [dataVersion]);
@@ -37,7 +46,8 @@ export function Home() {
     let i = 0;
     const timer = setInterval(() => setRolling(labels[i++ % labels.length] ?? "?"), 90);
     try {
-      const [{ seat }] = await Promise.all([api.draw(), new Promise((r) => setTimeout(r, 1000))]);
+      const [{ seat }] = await Promise.all([api.draw(branchId), new Promise((r) => setTimeout(r, 1000))]);
+      setBranchId(seat.branchId);
       bumpData();
       toast(`${seat.label}番の席に決まりました`);
     } catch (e) { setError(e); } finally { clearInterval(timer); setRolling(null); setBusy(false); }
@@ -68,7 +78,13 @@ export function Home() {
               </div>
             ) : (
               <>
-                <p style={{ marginBottom: 10 }}>出社したら「抽選する」を押してください。グループ席から優先して割り当てます。</p>
+                <p style={{ marginBottom: 10 }}>今日働く支店を選んで、「抽選する」を押してください。グループ席から優先して割り当てます。席は、ボタンを押すまで決まりません。</p>
+                <div className="branch-pick on-plate">
+                  <label htmlFor="work-branch">支店</label>
+                  <select id="work-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={busy}>
+                    {(branches.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === me.branchId ? "（所属）" : ""}</option>)}
+                  </select>
+                </div>
                 <button className="draw-btn" onClick={draw} disabled={busy}>抽選する</button>
                 <div className="vacancy" style={{ marginTop: 8 }}>空席 {totalCapacity - occupied}/{totalCapacity}</div>
               </>

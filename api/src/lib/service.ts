@@ -194,12 +194,14 @@ export class Service {
     return { seat };
   }
 
-  /** ホーム画面の「抽選する」。自分の拠点内でランダムに席を割り当てる */
-  async draw(user: User) {
+  /** ホーム画面の「抽選する」。選んだ支店（省略時は所属支店）の中でランダムに席を割り当てる。押したときだけ実行される */
+  async draw(user: User, branchId?: string) {
     const me = await this.me(user);
-    const seats = await this.seatsOf(me.branchId);
+    const bid = branchId || me.branchId;
+    if (!(await this.store.get<Branch>("Branches", bid))) throw new HttpError(400, "支店の指定が正しくありません");
+    const seats = await this.seatsOf(bid);
     const [occupancyMap, wishes] = await Promise.all([
-      this.occupancyToday(me.branchId),
+      this.occupancyToday(bid),
       this.store.list<Wish>("Wishes", me.branchId),
     ]);
     // 自分が今座っている席は空きとして数える（引き直しても、空きがなければ元の席のまま残す）

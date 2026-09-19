@@ -64,6 +64,13 @@ describe("Service", () => {
       expect(seat.branchId).toBe("a");
     });
 
+    it("抽選で支店を選ぶと、その支店の席に着席する。押すまでは着席しない", async () => {
+      expect((await svc.floor(member, "b")).assignments && Object.values((await svc.floor(member, "b")).assignments).flat()).not.toContain("u01");
+      const { seat } = await svc.draw(member, "b");
+      expect(seat.branchId).toBe("b");
+      await expect(svc.draw(member, "zzz")).rejects.toThrow("支店の指定");
+    });
+
     it("座席数を増やすと、増えた席も抽選の対象になる", async () => {
       await svc.updateSeatConfig(aAdmin, "a", { groups: [{ capacity: 6, count: 1 }], privateCount: 0 });
       for (let i = 0; i < 6; i++) await svc.draw({ id: `x${i}`, email: "", name: "", roles: [] }).catch(() => undefined);

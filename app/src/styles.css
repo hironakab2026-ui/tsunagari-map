@@ -277,5 +277,5 @@ button.seat:active{transform:scale(.97)}
 
 
 .seat-group.dense .slots .av,.seat-group.dense .slots .av-img{transform:scale(.8)}.seat-group.dense .slot-empty{width:18px;height:18px}
-.branch-pick{display:flex;align-items:center;gap:8px;margin:0 0 10px}.branch-pick select{flex:1;min-height:40px}
+.branch-pick{display:flex;align-items:center;gap:8px;margin:0 0 10px}.branch-pick select{flex:1;min-height:40px}.branch-pick.on-plate{justify-content:center;margin-bottom:10px}.branch-pick.on-plate label{color:inherit;opacity:.9;font-size:12px}
 .private-seats{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}

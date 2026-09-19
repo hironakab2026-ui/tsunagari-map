@@ -44,7 +44,7 @@ export interface Api {
   floor(branchId?: string): Promise<FloorView>;
   checkIn(seatCode: string): Promise<{ seat: Seat }>;
   checkOut(): Promise<void>;
-  draw(): Promise<{ seat: Seat }>;
+  draw(branchId?: string): Promise<{ seat: Seat }>;
   getSeatConfig(branchId: string): Promise<SeatConfig>;
   updateSeatConfig(branchId: string, config: SeatConfig): Promise<Seat[]>;
   seatAdmins(branchId: string): Promise<Person[]>;
@@ -84,7 +84,7 @@ class HttpApi implements Api {
   floor = (branchId?: string) => this.call<FloorView>(`/floor${branchId ? `?branchId=${branchId}` : ""}`);
   checkIn = (seatCode: string) => this.call<{ seat: Seat }>("/checkin", { method: "POST", body: JSON.stringify({ seatCode }) });
   checkOut = () => this.call<void>("/checkout", { method: "POST" });
-  draw = () => this.call<{ seat: Seat }>("/seats/draw", { method: "POST" });
+  draw = (branchId?: string) => this.call<{ seat: Seat }>("/seats/draw", { method: "POST", body: JSON.stringify({ branchId }) });
   getSeatConfig = (branchId: string) => this.call<SeatConfig>(`/branches/${branchId}/seat-config`);
   updateSeatConfig = (branchId: string, config: SeatConfig) =>
     this.call<Seat[]>(`/branches/${branchId}/seat-config`, { method: "PUT", body: JSON.stringify(config) });
