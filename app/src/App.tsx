@@ -34,6 +34,13 @@ export function App() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [workBranch, setWorkBranchState] = useState<string | null>(() => {
+    try { return localStorage.getItem("workBranch"); } catch { return null; }
+  });
+  const setWorkBranch = useCallback((id: string) => {
+    setWorkBranchState(id);
+    try { localStorage.setItem("workBranch", id); } catch { /* 保存できなくても動く */ }
+  }, []);
   const onboardingShown = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -76,7 +83,8 @@ export function App() {
   const ctx = useMemo<AppCtx | null>(() => me && {
     me, people, toast: setToastMsg, openCard: setCardId, refreshMe,
     dataVersion, bumpData: () => setDataVersion((v) => v + 1),
-  }, [me, people, refreshMe, dataVersion]);
+    workBranch: workBranch ?? me.branchId, setWorkBranch,
+  }, [me, people, refreshMe, dataVersion, workBranch, setWorkBranch]);
 
   if (error) return <div style={{ padding: 20 }}><ErrorBox error={error} /></div>;
   if (!ctx) return <Loading />;

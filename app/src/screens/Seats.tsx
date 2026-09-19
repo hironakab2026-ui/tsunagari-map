@@ -6,9 +6,8 @@ import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading, Segmented } from "../components/common";
 
 export function Seats() {
-  const { me, dataVersion } = useApp();
+  const { me, dataVersion, workBranch: branchId, setWorkBranch: setBranchId } = useApp();
   const [tab, setTab] = useState<"map" | "config">("map");
-  const [branchId, setBranchId] = useState(me.branchId);
   const branches = useAsync(() => api.branches(), [dataVersion]);
   const list = branches.data ?? [];
   const isAll = !!(me.roles?.includes("SeatManager") || me.roles?.includes("Admin"));

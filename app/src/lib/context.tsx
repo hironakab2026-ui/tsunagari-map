@@ -9,6 +9,9 @@ export interface AppCtx {
   refreshMe: (p: Person) => void;
   dataVersion: number;
   bumpData: () => void;
+  /** 今日働く支店。ホームの抽選と座席画面で共通 */
+  workBranch: string;
+  setWorkBranch: (id: string) => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

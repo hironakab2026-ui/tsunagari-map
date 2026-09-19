@@ -6,15 +6,7 @@ import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, Loading } from "../components/common";
 
 export function Home() {
-  const { me, people, openCard, dataVersion, bumpData, toast } = useApp();
-  // 今日どの支店で働くか。抽選はこの支店の席から選ぶ（前回の選択を覚えておく）
-  const [branchId, setBranchIdState] = useState(() => {
-    try { return localStorage.getItem("workBranch") ?? me.branchId; } catch { return me.branchId; }
-  });
-  const setBranchId = (id: string) => {
-    setBranchIdState(id);
-    try { localStorage.setItem("workBranch", id); } catch { /* 保存できなくても動く */ }
-  };
+  const { me, people, openCard, dataVersion, bumpData, toast, workBranch: branchId, setWorkBranch: setBranchId } = useApp();
   const branches = useAsync(() => api.branches(), []);
   const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
   const kaizen = useAsync(() => api.posts("kaizen"), [dataVersion]);
