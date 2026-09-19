@@ -151,6 +151,20 @@ describe("Service", () => {
       expect(next.fullName).toBe("山本 健太");
     });
 
+    it("アイコン画像を設定・削除できる", async () => {
+      const png = "data:image/png;base64,iVBORw0KGgo=";
+      const set = await svc.updateMe(member, { nickname: "けん", avatarUrl: png });
+      expect(set.avatarUrl).toBe(png);
+      expect((await svc.people(member)).find((p) => p.id === "u01")?.avatarUrl).toBe(png);
+      const cleared = await svc.updateMe(member, { nickname: "けん", avatarUrl: "" });
+      expect(cleared.avatarUrl).toBeUndefined();
+    });
+
+    it("画像以外・大きすぎるアイコンは受け付けない", async () => {
+      await expect(svc.updateMe(member, { nickname: "けん", avatarUrl: "https://example.com/a.png" })).rejects.toThrow("画像");
+      await expect(svc.updateMe(member, { nickname: "けん", avatarUrl: `data:image/jpeg;base64,${"A".repeat(200_001)}` })).rejects.toThrow("大きすぎ");
+    });
+
     it("趣味を非公開にした人の趣味は他人に返さない", async () => {
       await svc.updateMe({ ...member, id: "u02" }, { showPrivate: false, nickname: "みさき" });
       const list = await svc.people(member);
@@ -182,6 +196,22 @@ describe("Service", () => {
       });
       expect(post.kind).toBe("official");
       expect(post.mediaUrl).toBe("https://example.sharepoint.com/v.mp4");
+    });
+
+    it("公式ニュースに動画ファイルをアップロードでき、配信用に読み出せる", async () => {
+      const mp4 = `data:video/mp4;base64,${Buffer.from("fake-video-bytes").toString("base64")}`;
+      const { post } = await svc.createPost(pr, { kind: "official", category: "お知らせ", body: "動画です", mediaDataUrl: mp4 });
+      expect(post.mediaType).toBe("video");
+      expect(post.mediaUrl).toMatch(/^\/api\/photos\/.+\.mp4$/);
+      const file = await svc.photo(post.mediaUrl!.split("/").pop()!);
+      expect(file?.contentType).toBe("video/mp4");
+      expect(Buffer.from(file!.bytes).toString()).toBe("fake-video-bytes");
+    });
+
+    it("動画のアップロードは PR ロールのみ・動画以外の形式は不可", async () => {
+      const mp4 = `data:video/mp4;base64,${Buffer.from("x").toString("base64")}`;
+      await expect(svc.createPost(member, { kind: "official", category: "お知らせ", body: "動画です", mediaDataUrl: mp4 })).rejects.toThrow("権限");
+      await expect(svc.createPost(pr, { kind: "official", category: "お知らせ", body: "動画です", mediaDataUrl: "data:video/avi;base64,AAAA" })).rejects.toThrow("MP4");
     });
 
     it("拍手は1人1回", async () => {

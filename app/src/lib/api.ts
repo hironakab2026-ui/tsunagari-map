@@ -32,6 +32,8 @@ export interface NewPost {
   branchId?: string;
   mediaType?: "image" | "video";
   mediaUrl?: string;
+  /** 公式ニュースにアップロードする動画・画像（data URL） */
+  mediaDataUrl?: string;
 }
 
 export interface Api {
@@ -52,6 +54,7 @@ export interface Api {
   posts(kind: PostKind): Promise<Post[]>;
   createPost(p: NewPost): Promise<Post>;
   react(postId: string): Promise<void>;
+  pickForNews(postId: string): Promise<void>;
   voiceMap(): Promise<VoiceMapView>;
   updateKaizenStatus(postId: string, status: KaizenStatus): Promise<void>;
 }
@@ -94,6 +97,7 @@ class HttpApi implements Api {
   posts = (kind: PostKind) => this.call<Post[]>(`/posts?kind=${kind}`);
   createPost = (p: NewPost) => this.call<Post>("/posts", { method: "POST", body: JSON.stringify(p) });
   react = (postId: string) => this.call<void>(`/posts/${postId}/reactions`, { method: "POST" });
+  pickForNews = (postId: string) => this.call<void>(`/posts/${postId}/pick`, { method: "POST" });
   voiceMap = () => this.call<VoiceMapView>("/voice-map");
   updateKaizenStatus = (postId: string, status: KaizenStatus) =>
     this.call<void>(`/posts/${postId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });

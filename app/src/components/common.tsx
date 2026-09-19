@@ -7,7 +7,7 @@ export const DEPT_COLOR: Record<Dept, string> = {
   office: "var(--office)",
 };
 
-export function Avatar({ person, size = 40 }: { person: Pick<Person, "nickname" | "dept"> | null; size?: number }) {
+export function Avatar({ person, size = 40 }: { person: (Pick<Person, "nickname" | "dept"> & { avatarUrl?: string }) | null; size?: number }) {
   return (
     <div
       className="av"
@@ -17,7 +17,7 @@ export function Avatar({ person, size = 40 }: { person: Pick<Person, "nickname" 
         width: size, height: size, fontSize: Math.round(size * 0.38), margin: 0,
       }}
     >
-      {person?.nickname ? person.nickname.slice(0, 1) : "？"}
+      {person?.avatarUrl ? <img src={person.avatarUrl} alt="" className="av-img" /> : person?.nickname ? person.nickname.slice(0, 1) : "？"}
     </div>
   );
 }

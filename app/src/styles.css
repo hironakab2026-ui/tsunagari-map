@@ -135,3 +135,16 @@ nav.tabs button.on{color:var(--ai);font-weight:700}
 .text-btn{color:var(--ai);font-weight:700;font-size:13px;padding:6px 0}
 .status-select{border:1px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:12px;background:#fff}
 .photo img{width:100%;height:100%;object-fit:cover;border-radius:10px}
+.av{overflow:hidden}
+.av-img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar-edit{display:flex;align-items:center;gap:14px}
+.avatar-pick{display:inline-block;width:auto;padding:9px 14px;margin-top:0;cursor:pointer}
+.st-pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0}
+.st-pill.done{background:var(--wakakusa);color:#fff}
+.st-pill.progress{background:#FFF3DF;color:#8A5205}
+.st-pill.shared{background:var(--ai-soft);color:var(--ai)}
+.st-pill.unshared{background:#EEF0F2;color:var(--muted)}
+.status-filter{margin:12px 0 10px}
+.post-video{width:100%;max-height:320px;border-radius:10px;background:#000;display:block}
+.post-media{margin:8px 0}
+.media-picked{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;word-break:break-all}

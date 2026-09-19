@@ -208,8 +208,9 @@ export class SharePointStore implements DocStore {
   async readPhoto(name: string) {
     try {
       const buf = await graph<ArrayBuffer>(`/sites/${this.siteId}/drive/root:/tsunagari-photos/${encodeURIComponent(name)}:/content`);
-      const ext = name.split(".").pop();
-      return { bytes: new Uint8Array(buf), contentType: ext === "png" ? "image/png" : "image/jpeg" };
+      const ext = name.split(".").pop() ?? "";
+      const types: Record<string, string> = { png: "image/png", jpg: "image/jpeg", mp4: "video/mp4", webm: "video/webm" };
+      return { bytes: new Uint8Array(buf), contentType: types[ext] ?? "application/octet-stream" };
     } catch {
       return null;
     }

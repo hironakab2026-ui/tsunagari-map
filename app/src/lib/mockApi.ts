@@ -8,7 +8,7 @@ import type { Api, FloorView, NewPost } from "./api";
 // URL に ?mockUser=u13 を付けると、その人としてログインした状態を試せる（初回ログイン導線や権限の確認用）
 const ME = new URLSearchParams(location.search).get("mockUser") ?? "u05";
 const ADMIN_ROLES = ["SeatManager", "PR", "KaizenOwner"];
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish", "avatarUrl"];
 
 const wait = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 const clone = <T,>(v: T): T => structuredClone(v);
@@ -52,6 +52,7 @@ export class MockApi implements Api {
     const next = { ...this.peopleData[i] };
     for (const k of EDITABLE_PROFILE) if (k in patch) (next as Record<string, unknown>)[k] = (patch as Record<string, unknown>)[k];
     next.skills = (next.skills ?? []).slice(0, 5).map((s) => s.slice(0, 20));
+    if (!next.avatarUrl) delete next.avatarUrl;
     next.profileCompleted = true;
     this.peopleData[i] = next;
     return { ...clone(next), roles: this.roles() };
@@ -149,13 +150,21 @@ export class MockApi implements Api {
       id: `p${Date.now()}`, kind: input.kind, category: input.category, body: input.body,
       authorId: anonymous ? null : ME, authorDept: anonymous ? null : me.dept, branchId,
       createdAt: new Date().toISOString(), reactions: 0, photoUrl: input.photoDataUrl,
-      ...(input.mediaUrl ? { mediaType: input.mediaType ?? "video", mediaUrl: input.mediaUrl } : {}),
+      ...(input.mediaDataUrl
+        ? { mediaType: input.mediaDataUrl.startsWith("data:video/") ? ("video" as const) : ("image" as const), mediaUrl: input.mediaDataUrl }
+        : input.mediaUrl ? { mediaType: input.mediaType ?? "video", mediaUrl: input.mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(input.body, input.category).department } : {}),
     };
     this.postsData.unshift(post);
     return clone(post);
   }
   async react(postId: string) { await wait(50); const p = this.postsData.find((x) => x.id === postId); if (p) p.reactions++; }
+  async pickForNews(postId: string) {
+    await wait();
+    if (!this.roles().includes("PR")) throw new Error("この操作を行う権限がありません");
+    const p = this.postsData.find((x) => x.id === postId);
+    if (p) p.pickedForNews = true;
+  }
   async updateKaizenStatus(postId: string, status: KaizenStatus) {
     await wait(); const p = this.postsData.find((x) => x.id === postId); if (p) p.status = status;
   }

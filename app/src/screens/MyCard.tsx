@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { Person } from "@tsunagari/shared";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
-import { ErrorBox, Switch } from "../components/common";
+import { cropToSquareDataUrl } from "../lib/image";
+import { Avatar, ErrorBox, Switch } from "../components/common";
 import { PersonCard } from "../components/PersonCard";
 
 export function MyCard() {
@@ -37,16 +38,35 @@ function EditCard({ me, onSave, onCancel }: { me: Person; onSave: (p: Partial<Pe
   const [skills, setSkills] = useState(me.skills.join("、"));
   const [hobby, setHobby] = useState(me.hobby ?? "");
   const [askMe, setAskMe] = useState(me.askMe ?? "");
+  const [avatarUrl, setAvatarUrl] = useState(me.avatarUrl ?? "");
   const [error, setError] = useState<unknown>(null);
+  const pickAvatar = async (file?: File) => {
+    if (!file) return;
+    setError(null);
+    try { setAvatarUrl(await cropToSquareDataUrl(file)); } catch (e) { setError(e); }
+  };
   const submit = async () => {
     if (!nickname.trim()) return setError(new Error("呼ばれたい名前を入力してください"));
     try {
-      await onSave({ nickname: nickname.trim(), skills: skills.split(/[、,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5), hobby: hobby.trim(), askMe: askMe.trim() });
+      await onSave({ nickname: nickname.trim(), skills: skills.split(/[、,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5), hobby: hobby.trim(), askMe: askMe.trim(), avatarUrl });
     } catch (e) { setError(e); }
   };
   return (
     <div className="panel">
       <div className="muted">{me.fullName} ・ {me.unit}（社員情報から自動入力）</div>
+      <div className="field">
+        <label>アイコン</label>
+        <div className="avatar-edit">
+          <Avatar person={{ nickname: nickname || me.nickname, dept: me.dept, avatarUrl }} size={64} />
+          <div>
+            <label className="secondary avatar-pick">
+              {avatarUrl ? "写真を変更" : "顔写真を選ぶ"}
+              <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { void pickAvatar(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+            {avatarUrl && <button type="button" className="text-btn" onClick={() => setAvatarUrl("")}>写真を外す（頭文字のアイコンに戻す）</button>}
+          </div>
+        </div>
+      </div>
       <div className="field"><label htmlFor="nn">呼ばれたい名前</label><input id="nn" value={nickname} maxLength={12} onChange={(e) => setNickname(e.target.value)} /></div>
       <div className="field"><label htmlFor="sk">得意なこと（「、」区切りで5つまで）</label><input id="sk" value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="例：ハイブリッド診断、点検説明" /></div>
       <div className="field"><label htmlFor="hb">最近ハマっていること（任意）</label><input id="hb" value={hobby} maxLength={40} onChange={(e) => setHobby(e.target.value)} /></div>

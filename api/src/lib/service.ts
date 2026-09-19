@@ -11,7 +11,12 @@ import type { DocStore } from "./store.js";
 
 interface AuditDoc { postId: string; authorId: string; createdAt: string }
 
-const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish"];
+const EDITABLE_PROFILE: (keyof Person)[] = ["nickname", "skills", "hobby", "askMe", "talkOk", "showOnSeatMap", "showPrivate", "acceptWish", "avatarUrl"];
+const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+const AVATAR_MAX_LENGTH = 200_000; // data URL の文字数。256px角に切り抜いた JPEG なら 30〜50KB 程度
+const MEDIA_PATTERN = /^data:((?:image\/(?:png|jpeg))|(?:video\/(?:mp4|webm)));base64,(.+)$/;
+const MEDIA_MAX_BYTES = 30 * 1024 * 1024;
+const MEDIA_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "video/mp4": "mp4", "video/webm": "webm" };
 
 export function todayJst(offsetDays = 0) {
   const d = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000);
@@ -47,6 +52,12 @@ export class Service {
     for (const k of EDITABLE_PROFILE) if (k in patch) (next as Record<string, unknown>)[k] = patch[k];
     if (!next.nickname?.trim()) throw new HttpError(400, "呼ばれたい名前を入力してください");
     next.skills = (next.skills ?? []).slice(0, 5).map((s) => s.slice(0, 20));
+    if (next.avatarUrl) {
+      if (next.avatarUrl.length > AVATAR_MAX_LENGTH) throw new HttpError(400, "アイコン画像が大きすぎます。別の画像を選んでください");
+      if (!AVATAR_PATTERN.test(next.avatarUrl)) throw new HttpError(400, "アイコンは PNG・JPEG・WebP の画像にしてください");
+    } else {
+      delete next.avatarUrl; // 空文字はアイコンの削除
+    }
     next.profileCompleted = true;
     await this.store.put("People", next.id, next.branchId, next);
     return next;
@@ -219,7 +230,7 @@ export class Service {
 
   async createPost(user: User, input: {
     kind: PostKind; category: string; body: string; anonymous?: boolean; photoDataUrl?: string;
-    branchId?: string; mediaType?: "image" | "video"; mediaUrl?: string;
+    branchId?: string; mediaType?: "image" | "video"; mediaUrl?: string; mediaDataUrl?: string;
   }) {
     const me = await this.me(user);
     if (!["hitokoto", "kaizen", "official"].includes(input.kind)) throw new HttpError(400, "投稿の種類が不正です");
@@ -251,7 +262,17 @@ export class Service {
     }
 
     let mediaUrl: string | undefined;
-    if (input.kind === "official" && input.mediaUrl) {
+    let mediaType = input.mediaType;
+    if (input.kind === "official" && input.mediaDataUrl) {
+      const m = MEDIA_PATTERN.exec(input.mediaDataUrl);
+      if (!m) throw new HttpError(400, "動画は MP4・WebM、画像は PNG・JPEG にしてください");
+      const bytes = Buffer.from(m[2], "base64");
+      if (bytes.length > MEDIA_MAX_BYTES) throw new HttpError(400, "ファイルは30MB以下にしてください");
+      const name = `${id}.${MEDIA_EXT[m[1]]}`;
+      await this.store.savePhoto(name, bytes, m[1]);
+      mediaUrl = `/api/photos/${name}`;
+      mediaType = m[1].startsWith("video/") ? "video" : "image";
+    } else if (input.kind === "official" && input.mediaUrl) {
       if (!/^https:\/\//.test(input.mediaUrl)) throw new HttpError(400, "動画・画像のリンクは https:// から始まるURLにしてください");
       mediaUrl = input.mediaUrl;
     }
@@ -261,7 +282,7 @@ export class Service {
       id, kind: input.kind, category: input.category, body, photoUrl,
       authorId: anonymous ? null : me.id, authorDept: anonymous ? null : me.dept,
       branchId, createdAt: new Date().toISOString(), reactions: 0,
-      ...(mediaUrl ? { mediaType: input.mediaType ?? "video", mediaUrl } : {}),
+      ...(mediaUrl ? { mediaType: mediaType ?? "video", mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(body, input.category, rules).department } : {}),
     };
     await this.store.put("Posts", id, input.kind, post);
@@ -311,7 +332,7 @@ export class Service {
   }
 
   photo(name: string) {
-    if (!/^[\w-]+\.(png|jpg)$/.test(name)) throw new HttpError(400, "不正なファイル名です");
+    if (!/^[\w-]+\.(png|jpg|mp4|webm)$/.test(name)) throw new HttpError(400, "不正なファイル名です");
     return this.store.readPhoto(name);
   }
 

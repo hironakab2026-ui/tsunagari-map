@@ -1,7 +1,9 @@
 import { useState } from "react";
+import type { Post } from "@tsunagari/shared";
 import { api, type BranchStat } from "../lib/api";
+import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
-import { ErrorBox, Loading, Segmented } from "../components/common";
+import { Avatar, ErrorBox, Loading, Segmented } from "../components/common";
 
 type Mode = "all" | "kaizen" | "cross";
 
@@ -48,7 +50,7 @@ export function VoiceMap() {
       </div>
       <p className="muted" style={{ margin: "6px 2px 0" }}>位置は模式図です。円の大きさ＝投稿数、線＝営業とエンジニアの共同提案。</p>
       <div className="sec-title">{selBranch ? `${selBranch.name}の声` : "拠点をタップ"}</div>
-      {sel && selBranch ? <BranchDetail stat={sel} /> : <div className="panel muted">地図上の拠点を選ぶと、部門別の内訳と最近の声が表示されます。</div>}
+      {sel && selBranch ? <BranchDetail key={selBranch.id} stat={sel} branchId={selBranch.id} mode={mode} /> : <div className="panel muted">地図上の拠点を選ぶと、部門別の内訳と、その拠点の声が1件ずつ状態つきで表示されます。</div>}
     </>
   );
 }
@@ -70,19 +72,83 @@ function Pie({ x, y, r, segs, total }: { x: number; y: number; r: number; segs: 
   );
 }
 
-function BranchDetail({ stat }: { stat: BranchStat }) {
+type Tone = "done" | "progress" | "shared" | "unshared";
+type Filter = "all" | Tone;
+
+/** 投稿の状態。改善の声は対応の進み具合、ひとこと投稿は社内ニュースで共有したかどうか */
+function statusOf(p: Post): { label: string; tone: Tone } {
+  if (p.kind === "kaizen") {
+    if (p.status === "done") return { label: "解決済み", tone: "done" };
+    if (p.status === "inProgress") return { label: "対応中", tone: "progress" };
+    if (p.status === "reviewing") return { label: "検討中", tone: "progress" };
+    return { label: "受付済み（未対応）", tone: "progress" };
+  }
+  if (p.kind === "official") return { label: "共有済み（公式）", tone: "shared" };
+  return p.pickedForNews ? { label: "共有済み（社内ニュース）", tone: "shared" } : { label: "まだ共有していない", tone: "unshared" };
+}
+
+const KIND_LABEL = { hitokoto: "ひとこと", kaizen: "改善の声", official: "公式" } as const;
+const FILTERS: [Filter, string][] = [["all", "すべて"], ["done", "解決済み"], ["progress", "対応中"], ["shared", "共有済み"], ["unshared", "未共有"]];
+
+function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: string; mode: Mode }) {
+  const { me, people, dataVersion, bumpData, toast } = useApp();
+  const [filter, setFilter] = useState<Filter>("all");
+  const canPick = !!me.roles?.some((r) => r === "PR" || r === "Admin");
+  const all = useAsync(async () => {
+    const [h, k, o] = await Promise.all([api.posts("hitokoto"), api.posts("kaizen"), api.posts("official")]);
+    return [...h, ...k, ...o];
+  }, [dataVersion]);
+
   const t = stat.sales + stat.eng + stat.office || 1;
+  const inMode = (p: Post) => mode === "all" || (mode === "kaizen" && p.kind === "kaizen") || (mode === "cross" && p.kind === "kaizen" && (p.coAuthorIds?.length ?? 0) > 0);
+  const posts = (all.data ?? []).filter((p) => p.branchId === branchId && inMode(p)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const shown = posts.filter((p) => filter === "all" || statusOf(p).tone === filter);
+  const count = (f: Filter) => posts.filter((p) => f === "all" || statusOf(p).tone === f).length;
+
+  const pick = async (id: string) => {
+    try { await api.pickForNews(id); bumpData(); toast("社内ニュースで共有しました"); } catch (e) { toast(e instanceof Error ? e.message : "共有できませんでした"); }
+  };
+
   return (
-    <div className="panel">
-      <div style={{ fontSize: 13 }}>投稿 <b>{stat.sales + stat.eng + stat.office}</b>件 ・ 改善 <b>{stat.kaizen}</b>件</div>
-      <div className="bar">
-        <div style={{ width: `${(stat.sales / t) * 100}%`, background: "var(--sales)" }} />
-        <div style={{ width: `${(stat.eng / t) * 100}%`, background: "var(--eng)" }} />
-        <div style={{ width: `${(stat.office / t) * 100}%`, background: "var(--office)" }} />
+    <>
+      <div className="panel">
+        <div style={{ fontSize: 13 }}>投稿 <b>{stat.sales + stat.eng + stat.office}</b>件 ・ 改善 <b>{stat.kaizen}</b>件</div>
+        <div className="bar">
+          <div style={{ width: `${(stat.sales / t) * 100}%`, background: "var(--sales)" }} />
+          <div style={{ width: `${(stat.eng / t) * 100}%`, background: "var(--eng)" }} />
+          <div style={{ width: `${(stat.office / t) * 100}%`, background: "var(--office)" }} />
+        </div>
+        <div className="muted"><i className="dot d-sales" />営業 {stat.sales}　<i className="dot d-eng" />エンジニア {stat.eng}　<i className="dot d-office" />事務・本部 {stat.office}</div>
+        {stat.sales + stat.eng + stat.office < 5 && <div className="route" style={{ marginTop: 10 }}>投稿が少ない拠点です。広報担当に取材依頼を出せます。</div>}
       </div>
-      <div className="muted"><i className="dot d-sales" />営業 {stat.sales}　<i className="dot d-eng" />エンジニア {stat.eng}　<i className="dot d-office" />事務・本部 {stat.office}</div>
-      {stat.latest.length > 0 && <div style={{ fontSize: 13, marginTop: 10, lineHeight: 1.6 }}>最近の声：{stat.latest.join("／")}</div>}
-      {stat.sales + stat.eng + stat.office < 5 && <div className="route" style={{ marginTop: 10 }}>投稿が少ない拠点です。広報担当に取材依頼を出せます。</div>}
-    </div>
+      <div className="cats status-filter" role="group" aria-label="状態で絞り込み">
+        {FILTERS.map(([f, label]) => <button key={f} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{label} {count(f)}</button>)}
+      </div>
+      {all.loading && <Loading />}
+      {!all.loading && shown.length === 0 && <div className="panel muted">この条件の投稿はありません。</div>}
+      {shown.map((p) => {
+        const st = statusOf(p);
+        const author = p.authorId ? people.get(p.authorId) ?? null : null;
+        return (
+          <article className="post" key={p.id}>
+            <div className="post-head">
+              <Avatar person={author} size={30} />
+              <div>
+                <b>{p.kind === "official" ? "本部広報" : author ? `${author.nickname || author.fullName}さん` : "匿名"}</b><br />
+                <span className="muted">{new Date(p.createdAt).toLocaleDateString("ja-JP")} ・ {KIND_LABEL[p.kind]}</span>
+              </div>
+              <span className={`st-pill ${st.tone}`} style={{ marginLeft: "auto" }}>{st.label}</span>
+            </div>
+            <div>{p.body}</div>
+            <div className="post-foot">
+              <span>{p.category}</span>
+              {p.kind === "kaizen" && p.assignedTo && <span>担当：{p.assignedTo}</span>}
+              {p.mediaUrl && <span>{p.mediaType === "video" ? "動画あり" : "画像あり"}</span>}
+              {canPick && p.kind === "hitokoto" && !p.pickedForNews && <button className="text-btn" onClick={() => pick(p.id)}>社内ニュースで共有する</button>}
+            </div>
+          </article>
+        );
+      })}
+    </>
   );
 }

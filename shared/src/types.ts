@@ -23,6 +23,8 @@ export interface Person {
   showOnSeatMap: boolean;
   showPrivate: boolean;
   acceptWish: boolean;   // 話したい人リクエストを受け付けるか
+  /** アイコン（顔写真など）。小さく切り抜いた画像の data URL。未設定なら頭文字の丸アイコン */
+  avatarUrl?: string;
   /** 名刺を一度でも保存したか。false の間は初回ログイン案内を表示する */
   profileCompleted: boolean;
   /** /me のときだけ返る。Entra のアプリロール */

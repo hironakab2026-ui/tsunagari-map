@@ -4,6 +4,8 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 import { useAsync } from "../lib/useAsync";
 import { AuthImage } from "../components/AuthImage";
+import { AuthVideo } from "../components/AuthVideo";
+import { fileToDataUrl } from "../lib/image";
 import { Avatar, ErrorBox, Loading, Segmented, Sheet, Switch } from "../components/common";
 
 const STATUSES: KaizenStatus[] = ["received", "reviewing", "inProgress", "done"];
@@ -71,11 +73,7 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
       {post.kind !== "hitokoto" && <span className="chip" style={{ background: "#EEF0F2", color: "var(--ink)" }}>{post.category}</span>}
       <div style={{ marginTop: 6 }}>{post.body}</div>
       {post.photoUrl && <div className="photo"><AuthImage src={post.photoUrl} alt="投稿写真" /></div>}
-      {post.mediaUrl && (
-        <a className="chip" style={{ marginTop: 8, display: "inline-block" }} href={post.mediaUrl} target="_blank" rel="noreferrer">
-          {post.mediaType === "video" ? "動画を見る" : "画像を見る"} →
-        </a>
-      )}
+      {post.mediaUrl && <PostMedia post={post} />}
       {post.kind === "kaizen" && post.status && (
         <>
           <div className="status">{STATUSES.map((s, i) => <span key={s} className={i <= STATUSES.indexOf(post.status!) ? "done" : ""}>{KAIZEN_STATUS_LABEL[s]}</span>)}</div>
@@ -92,6 +90,25 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
   );
 }
 
+const VIDEO_LINK = /\.(mp4|webm|mov)(\?.*)?$/i;
+
+/** 公式ニュースの動画・画像。動画ファイルとして再生できるものはその場で再生し、それ以外の外部リンクは開くリンクにする */
+function PostMedia({ post }: { post: Post }) {
+  const url = post.mediaUrl!;
+  const playable = post.mediaType === "video" && (url.startsWith("/api/") || url.startsWith("data:") || VIDEO_LINK.test(url));
+  if (playable) return <div className="post-media"><AuthVideo src={url} /></div>;
+  if (post.mediaType === "image" && (url.startsWith("/api/") || url.startsWith("data:"))) {
+    return <div className="photo"><AuthImage src={url} alt="添付画像" /></div>;
+  }
+  return (
+    <a className="chip" style={{ marginTop: 8, display: "inline-block" }} href={url} target="_blank" rel="noreferrer">
+      {post.mediaType === "video" ? "動画を見る" : "画像を見る"} →
+    </a>
+  );
+}
+
+const MEDIA_MAX_MB = 30;
+
 function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch[]; onDone: () => void }) {
   const { me, toast, bumpData } = useApp();
   const [category, setCategory] = useState(CATEGORIES[kind][0]);
@@ -100,6 +117,8 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
   const [photo, setPhoto] = useState<string>();
   const [branchId, setBranchId] = useState(me.branchId);
   const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaDataUrl, setMediaDataUrl] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const maxLen = kind === "official" ? 500 : 140;
@@ -112,6 +131,13 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
     r.onload = () => setPhoto(String(r.result));
     r.readAsDataURL(file);
   };
+  const onMediaFile = async (file?: File) => {
+    if (!file) return;
+    setError(null);
+    if (!/^video\/(mp4|webm)$/.test(file.type)) return setError(new Error("動画は MP4 または WebM のファイルを選んでください"));
+    if (file.size > MEDIA_MAX_MB * 1024 * 1024) return setError(new Error(`ファイルは${MEDIA_MAX_MB}MB以下にしてください（選んだファイル：${(file.size / 1024 / 1024).toFixed(1)}MB）`));
+    try { setMediaDataUrl(await fileToDataUrl(file)); setMediaFile(file); } catch (e) { setError(e); }
+  };
   const submit = async () => {
     if (pii.length && !window.confirm(`${pii.join("・")}が含まれている可能性があります。このまま送信しますか？`)) return;
     setBusy(true); setError(null);
@@ -119,7 +145,8 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
       await api.createPost({
         kind, category, body, anonymous, photoDataUrl: photo,
         branchId: kind === "kaizen" ? branchId : undefined,
-        mediaUrl: kind === "official" && mediaUrl.trim() ? mediaUrl.trim() : undefined,
+        mediaDataUrl: kind === "official" ? mediaDataUrl : undefined,
+        mediaUrl: kind === "official" && !mediaDataUrl && mediaUrl.trim() ? mediaUrl.trim() : undefined,
         mediaType: "video",
       });
       bumpData();
@@ -163,10 +190,28 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
         </>
       )}
       {kind === "official" && (
-        <div className="field">
-          <label htmlFor="media">動画・画像のリンク（任意。https:// から始まるURL）</label>
-          <input id="media" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="例：https://.../safety-training.mp4" />
-        </div>
+        <>
+          <div className="field">
+            <label>動画をアップロード（MP4・WebM、{MEDIA_MAX_MB}MBまで）</label>
+            {mediaFile ? (
+              <div className="media-picked">
+                <span>{mediaFile.name}（{(mediaFile.size / 1024 / 1024).toFixed(1)}MB）</span>
+                <button type="button" className="text-btn" onClick={() => { setMediaFile(null); setMediaDataUrl(undefined); }}>外す</button>
+              </div>
+            ) : (
+              <label className="secondary" style={{ display: "block", textAlign: "center" }}>
+                動画ファイルを選ぶ
+                <input id="media-file" type="file" accept="video/mp4,video/webm" hidden onChange={(e) => { void onMediaFile(e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
+          {!mediaFile && (
+            <div className="field">
+              <label htmlFor="media">または、動画・画像のリンク（https:// から始まるURL）</label>
+              <input id="media" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="例：https://.../safety-training.mp4" />
+            </div>
+          )}
+        </>
       )}
       {pii.length > 0 && <div className="warn">{pii.join("・")}が含まれている可能性があります。お客様の個人情報は書かないでください。</div>}
       <p className="muted" style={{ marginTop: 10 }}>お客様の氏名・車両番号など個人情報は書かないでください。</p>
