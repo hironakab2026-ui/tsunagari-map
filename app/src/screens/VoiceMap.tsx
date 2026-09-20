@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IMPROVEMENT_FIELDS, postStatus, type Post, type PostStatusFilter } from "@tsunagari/shared";
 import { api, type BranchStat } from "../lib/api";
 import { useApp } from "../lib/context";
+import { useTween } from "../lib/useTween";
 import { useAsync } from "../lib/useAsync";
 import { Avatar, ErrorBox, FieldChip, Loading, Segmented } from "../components/common";
 
@@ -23,12 +24,20 @@ export function VoiceMap() {
   const [mode, setMode] = useState<Mode>("all");
   const [selected, setSelected] = useState<string | null>(null);
   const q = useAsync(() => api.voiceMap(), []);
+  // 種類を切り替えたとき、円の大きさと円グラフの割合が滑らかに変わるようにする
+  const targets = (q.data?.branches ?? []).flatMap((b) => {
+    const s = q.data!.stats.find((x) => x.branchId === b.id)!;
+    const c = fieldCounts(s, mode);
+    return IMPROVEMENT_FIELDS.map((f) => c[f.id] ?? 0);
+  });
+  const shownValues = useTween(targets);
   if (q.loading && !q.data) return <Loading />;
   if (q.error || !q.data) return <ErrorBox error={q.error} />;
   const { branches, stats, collaborations } = q.data;
   const statOf = (id: string) => stats.find((s) => s.branchId === id)!;
-  const totalOf = (id: string) => sum(fieldCounts(statOf(id), mode));
-  const maxTotal = Math.max(1, ...branches.map((b) => totalOf(b.id)));
+  const F = IMPROVEMENT_FIELDS.length;
+  const animatedCounts = (bi: number) => shownValues.slice(bi * F, bi * F + F);
+  const maxTotal = Math.max(1, ...branches.map((_, bi) => animatedCounts(bi).reduce((a, b) => a + b, 0)));
   const pos = new Map(branches.map((b) => [b.id, b]));
   const selBranch = selected ? pos.get(selected) : null;
 
@@ -46,17 +55,18 @@ export function VoiceMap() {
             return <line key={`${a}-${b}`} x1={A.mapX} y1={A.mapY} x2={B.mapX} y2={B.mapY} stroke="var(--brand-deep)" strokeWidth={3} strokeDasharray="6 5" strokeLinecap="round" opacity={0.7} />;
           })}
           {branches.map((b, i) => {
-            const counts = fieldCounts(statOf(b.id), mode);
-            const total = sum(counts);
+            const anim = animatedCounts(i);
+            const total = anim.reduce((a, c) => a + c, 0);
+            const shownTotal = Math.round(sum(fieldCounts(statOf(b.id), mode)));
             // 円の大きさは、寄せられた声の数に応じて変える（いちばん多い拠点を最大にして、差がはっきり見えるようにする）
-            const r = total === 0 ? 8 : 10 + 25 * Math.pow(total / maxTotal, 0.75);
+            const r = total < 0.05 ? 8 : 10 + 25 * Math.pow(total / maxTotal, 0.75);
             return (
-              <g key={b.id} className="map-bubble" onClick={() => setSelected(b.id)} style={{ cursor: "pointer", animationDelay: `${i * 70}ms` }} role="button" aria-label={`${b.name} 声${total}件`}>
-                {total === 0
+              <g key={b.id} className="map-bubble" onClick={() => setSelected(b.id)} style={{ cursor: "pointer", animationDelay: `${i * 70}ms` }} role="button" aria-label={`${b.name} 声${shownTotal}件`}>
+                {total < 0.05
                   ? <circle cx={b.mapX} cy={b.mapY} r={r} style={{ fill: "var(--oak-300)" }} />
-                  : <Pie x={b.mapX} y={b.mapY} r={r} segs={IMPROVEMENT_FIELDS.map((f): [number, string] => [counts[f.id] ?? 0, f.color])} total={total} />}
+                  : <Pie x={b.mapX} y={b.mapY} r={r} segs={IMPROVEMENT_FIELDS.map((f, fi): [number, string] => [anim[fi], f.color])} total={total} />}
                 <circle cx={b.mapX} cy={b.mapY} r={r} fill="transparent" stroke={selected === b.id ? "var(--ink)" : "#fff"} strokeWidth={selected === b.id ? 3 : 2} style={{ transition: "stroke-width .2s" }} />
-                {total > 0 && <text x={b.mapX} y={b.mapY + 5} textAnchor="middle" fontSize={r >= 20 ? 15 : 12} fontWeight={800} fill="#fff" stroke="rgba(36,27,20,.6)" strokeWidth={3} paintOrder="stroke">{total}</text>}
+                {shownTotal > 0 && <text x={b.mapX} y={b.mapY + 5} textAnchor="middle" fontSize={r >= 20 ? 15 : 12} fontWeight={800} fill="#fff" stroke="rgba(36,27,20,.6)" strokeWidth={3} paintOrder="stroke" style={{ transition: "opacity .3s" }}>{shownTotal}</text>}
                 <text x={b.mapX} y={b.mapY + r + 13} textAnchor="middle" fontSize={12} fontWeight={700} style={{ fill: "var(--ink)" }}>{b.name}</text>
               </g>
             );
@@ -78,8 +88,8 @@ function Pie({ x, y, r, segs, total }: { x: number; y: number; r: number; segs: 
   return (
     <>
       {segs.map(([v, c], i) => {
-        if (!v) return null;
-        if (v === total) return <circle key={i} cx={x} cy={y} r={r} fill={c} />;
+        if (v < 0.001) return null;
+        if (v >= total - 0.001) return <circle key={i} cx={x} cy={y} r={r} fill={c} />;
         const a2 = ang + (2 * Math.PI * v) / total;
         const large = a2 - ang > Math.PI ? 1 : 0;
         const d = `M${x} ${y} L${x + r * Math.cos(ang)} ${y + r * Math.sin(ang)} A${r} ${r} 0 ${large} 1 ${x + r * Math.cos(a2)} ${y + r * Math.sin(a2)} Z`;
@@ -110,7 +120,7 @@ function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: st
   const nameOf = (id: string) => people.get(id)?.fullName;
 
   return (
-    <>
+    <div className="branch-detail">
       <div className="panel">
         <div style={{ fontSize: 13 }}>要改善事項 <b>{stat.issue}</b>件 ・ 業務改善報告 <b>{stat.report}</b>件</div>
         <div className="bar" aria-hidden>
@@ -150,6 +160,6 @@ function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: st
           </article>
         );
       })}
-    </>
+    </div>
   );
 }

@@ -77,9 +77,11 @@ nav.tabs button:active img{scale:.8}
 .topic-announce{background:var(--pink-100);color:var(--pink-deep)}
 .topic-official{background:var(--sky-100);color:var(--sky-deep)}
 .topic-branch{background:var(--brand-soft);color:var(--brand-deep)}
-.seg{display:flex;background:rgba(255,255,255,.65);border-radius:999px;padding:4px;margin:0 0 12px;box-shadow:inset 0 1px 3px rgba(45,111,132,.18)}
-.seg button{flex:1;padding:9px 2px;border-radius:999px;font-size:12.5px;white-space:nowrap;color:var(--muted);min-height:38px;font-weight:700;transition:background-color .25s,color .25s,box-shadow .25s}
-.seg button.on{background:#fff;color:var(--brand-deep);font-weight:900;box-shadow:0 2px 0 rgba(63,122,38,.25),0 1px 4px rgba(45,111,132,.2)}
+.seg{position:relative;display:flex;background:rgba(255,255,255,.65);border-radius:999px;padding:4px;margin:0 0 12px;box-shadow:inset 0 1px 3px rgba(45,111,132,.18)}
+/* 選んでいる項目の白いつまみが、横に滑って移る */
+.seg::before{content:"";position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / var(--n,1));border-radius:999px;background:#fff;box-shadow:0 2px 0 rgba(63,122,38,.25),0 1px 4px rgba(45,111,132,.2);transform:translateX(calc(var(--i,0) * 100%));transition:transform .4s cubic-bezier(.3,1.25,.5,1)}
+.seg button{position:relative;z-index:1;flex:1 1 0;min-width:0;padding:9px 2px;border-radius:999px;font-size:12.5px;white-space:nowrap;color:var(--muted);min-height:38px;font-weight:700;transition:background-color .25s,color .25s,box-shadow .25s}
+.seg button.on{color:var(--brand-deep);font-weight:900}
 
 /* アイコン：所属の色は縁に使う。写真・頭文字の色とぶつからない */
 .av-wrap{position:relative;display:inline-block;flex-shrink:0;line-height:0;vertical-align:middle}
@@ -398,3 +400,8 @@ input[type=number]{text-align:center;padding:8px 6px}
 .cats button .dot{margin-right:6px}
 .effect{display:flex;gap:8px;align-items:baseline;margin-top:6px;padding:8px 12px;border-radius:14px;background:var(--brand-soft);color:var(--brand-deep);font-size:12.5px;font-weight:700;line-height:1.5}
 .effect b{flex-shrink:0;font-size:11px;background:var(--brand-deep);color:#fff;border-radius:999px;padding:1px 8px}
+
+/* 拠点をえらんだとき、詳細が下からふわっと入れ替わる */
+.branch-detail{animation:fade-up .4s var(--ease-out) backwards}
+.map-bubble circle{transition:stroke-width .25s var(--ease-out),stroke .25s}
+.map-wrap line{animation:fade-in .6s ease-out backwards}

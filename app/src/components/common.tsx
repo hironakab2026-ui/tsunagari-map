@@ -63,7 +63,7 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
 
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
-    <div className="seg" role="tablist">
+    <div className="seg" role="tablist" style={{ ["--n" as string]: options.length, ["--i" as string]: Math.max(0, options.findIndex(([v]) => v === value)) }}>
       {options.map(([v, l]) => (
         <button key={v} role="tab" aria-selected={v === value} className={v === value ? "on" : ""} onClick={() => onChange(v)}>
           {l}
