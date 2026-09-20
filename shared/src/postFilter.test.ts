@@ -84,3 +84,10 @@ describe("activeFilterCount", () => {
     expect(activeFilterCount({ ...EMPTY_POST_FILTER, branchId: "d", status: "done", sort: "reactions" })).toBe(3);
   });
 });
+
+describe("postStatus（業務改善報告）", () => {
+  it("業務改善報告は「改善済み」", () => {
+    const p = { id: "r", kind: "report", authorId: "u1", authorDept: "sales", branchId: "hq", category: "安全", body: "", createdAt: "", reactions: 0 } as const;
+    expect(postStatus(p)).toEqual({ label: "改善済み", tone: "done" });
+  });
+});

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DEPT_LABEL, EMPTY_POST_FILTER, KAIZEN_STATUS_LABEL, detectPii, filterPosts, routeKaizen, type Branch, type KaizenStatus, type Post, type PostFilter, type PostKind } from "@tsunagari/shared";
+import { DEPT_LABEL, EMPTY_POST_FILTER, IMPROVEMENT_FIELDS, fieldOf, KAIZEN_STATUS_LABEL, detectPii, filterPosts, routeKaizen, type Branch, type KaizenStatus, type Post, type PostFilter, type PostKind } from "@tsunagari/shared";
 import { PostFilterBar } from "../components/PostFilterBar";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
@@ -7,15 +7,16 @@ import { useAsync } from "../lib/useAsync";
 import { AuthImage } from "../components/AuthImage";
 import { AuthVideo } from "../components/AuthVideo";
 import { fileToDataUrl } from "../lib/image";
-import { Avatar, ErrorBox, Loading, Segmented, Sheet, Switch } from "../components/common";
+import { Avatar, ErrorBox, FieldChip, Loading, Segmented, Sheet, Switch } from "../components/common";
 
 const STATUSES: KaizenStatus[] = ["received", "reviewing", "inProgress", "done"];
 const CATEGORIES: Record<PostKind, string[]> = {
   hitokoto: ["できごと", "ありがとう", "レース・イベント", "お客様の笑顔"],
-  kaizen: ["業務の手間", "お客様対応", "設備", "安全", "その他"],
+  kaizen: IMPROVEMENT_FIELDS.map((f) => f.label),
+  report: IMPROVEMENT_FIELDS.map((f) => f.label),
   official: ["お知らせ", "安全運転", "イベント", "社内制度"],
 };
-const TAB_LABEL: Record<PostKind, string> = { hitokoto: "ひとこと", kaizen: "改善の声", official: "公式" };
+const TAB_LABEL: Record<PostKind, string> = { hitokoto: "ひとこと", kaizen: "要改善事項", report: "業務改善報告", official: "公式" };
 
 const PAGE_SIZE = 10;
 
@@ -52,7 +53,7 @@ export function Voices({ composeOpen, setComposeOpen }: { composeOpen: boolean; 
         />
       </div>
       {posts.loading && !posts.data ? <Loading /> : <ErrorBox error={posts.error} />}
-      {!posts.loading && all.length === 0 && <div className="panel muted">{kind === "official" ? "まだ公式ニュースはありません。" : "まだ投稿がありません。右下の「投稿する」から最初のひとことをどうぞ。"}</div>}
+      {!posts.loading && all.length === 0 && <div className="panel muted">{kind === "official" ? "まだ公式ニュースはありません。" : kind === "report" ? "まだ業務改善報告はありません。右下の「投稿する」から、改善した事例を共有しましょう。" : kind === "kaizen" ? "まだ要改善事項はありません。困っていること・直したいことは、右下の「投稿する」から。" : "まだ投稿がありません。右下の「投稿する」から最初のひとことをどうぞ。"}</div>}
       {!posts.loading && all.length > 0 && filtered.length === 0 && (
         <div className="panel empty-state">
           <b>条件に合う投稿がありません</b>
@@ -81,10 +82,7 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
   const { me, people, openCard } = useApp();
   const canManage = !!me.roles?.some((r) => r === "KaizenOwner" || r === "Admin");
   const author = post.authorId ? people.get(post.authorId) ?? null : null;
-  const cross = post.kind === "kaizen" && (() => {
-    const ds = new Set([post.authorId, ...(post.coAuthorIds ?? [])].map((id) => (id ? people.get(id)?.dept : undefined)));
-    return ds.has("sales") && ds.has("eng");
-  })();
+  const together = (post.coAuthorIds ?? []).map((id) => people.get(id)?.fullName).filter(Boolean);
   const react = async () => { await api.react(post.id); onChanged(); };
   const setStatus = async (s: KaizenStatus) => { await api.updateKaizenStatus(post.id, s); onChanged(); };
 
@@ -100,15 +98,18 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
           <b>{post.kind === "official" ? "本部広報" : author ? `${author.fullName}さん` : "匿名"}</b><br />
           <span className="muted">
             {post.kind === "official" ? "公式アカウント" : author ? DEPT_LABEL[author.dept] : "部門非表示"} ・ {new Date(post.createdAt).toLocaleDateString("ja-JP")}
-            {post.kind === "kaizen" && branchName.get(post.branchId) && ` ・ ${branchName.get(post.branchId)}`}
+            {(post.kind === "kaizen" || post.kind === "report") && branchName.get(post.branchId) && ` ・ ${branchName.get(post.branchId)}`}
           </span>
         </div>
         {post.pickedForNews && <span className="picked" style={{ marginLeft: "auto" }}>社内ニュース採用</span>}
-        {cross && <span className="chip" style={{ marginLeft: "auto" }}>営業×エンジニア</span>}
+        {post.kind === "report" && <span className="st-pill done" style={{ marginLeft: "auto" }}>改善済み</span>}
       </div>
-      {post.kind !== "hitokoto" && <span className="chip" style={{ background: "#EEF0F2", color: "var(--ink)" }}>{post.category}</span>}
+      {(post.kind === "kaizen" || post.kind === "report") && <FieldChip category={post.category} />}
+      {post.kind === "official" && <span className="chip" style={{ background: "#EEF0F2", color: "var(--ink)" }}>{post.category}</span>}
       <div style={{ marginTop: 6 }}>{post.body}</div>
       {post.photoUrl && <div className="photo"><AuthImage src={post.photoUrl} alt="投稿写真" /></div>}
+      {post.effect && <div className="effect"><b>効果</b>{post.effect}</div>}
+      {together.length > 0 && <div className="muted" style={{ marginTop: 4 }}>一緒に取り組んだ人：{together.join("・")}</div>}
       {post.mediaUrl && <PostMedia post={post} />}
       {post.kind === "kaizen" && post.status && (
         <>
@@ -146,7 +147,10 @@ function PostMedia({ post }: { post: Post }) {
 const MEDIA_MAX_MB = 30;
 
 function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch[]; onDone: () => void }) {
-  const { me, toast, bumpData } = useApp();
+  const { me, people, toast, bumpData } = useApp();
+  const [effect, setEffect] = useState("");
+  const [coAuthors, setCoAuthors] = useState<string[]>([]);
+  const isVoice = kind === "kaizen" || kind === "report"; // 声マップの対象（要改善事項・業務改善報告）
   const [category, setCategory] = useState(CATEGORIES[kind][0]);
   const [body, setBody] = useState("");
   const [anonymous, setAnonymous] = useState(false);
@@ -157,7 +161,7 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
   const [mediaDataUrl, setMediaDataUrl] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const maxLen = kind === "official" ? 500 : 140;
+  const maxLen = kind === "official" ? 500 : kind === "report" ? 200 : 140;
   const pii = detectPii(body);
   const route = kind === "kaizen" && body ? routeKaizen(body, category) : null;
 
@@ -180,25 +184,27 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
     try {
       await api.createPost({
         kind, category, body, anonymous, photoDataUrl: photo,
-        branchId: kind === "kaizen" ? branchId : undefined,
+        branchId: isVoice ? branchId : undefined,
+        effect: kind === "report" ? effect.trim() || undefined : undefined,
+        coAuthorIds: isVoice && coAuthors.length ? coAuthors : undefined,
         mediaDataUrl: kind === "official" ? mediaDataUrl : undefined,
         mediaUrl: kind === "official" && !mediaDataUrl && mediaUrl.trim() ? mediaUrl.trim() : undefined,
         mediaType: "video",
       });
       bumpData();
-      toast(kind === "kaizen" ? "改善の声を送りました。進み具合はこの画面で見られます" : "投稿しました");
+      toast(kind === "kaizen" ? "要改善事項を送りました。進み具合はこの画面で見られます" : kind === "report" ? "業務改善報告を共有しました。ありがとうございます" : "投稿しました");
       onDone();
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 
   return (
     <>
-      <div style={{ fontWeight: 700 }}>{kind === "hitokoto" ? "ひとこと投稿" : kind === "kaizen" ? "改善の声を出す" : "公式ニュースを投稿"}</div>
+      <div style={{ fontWeight: 700 }}>{kind === "hitokoto" ? "ひとこと投稿" : kind === "kaizen" ? "要改善事項を出す" : kind === "report" ? "業務改善報告を共有する" : "公式ニュースを投稿"}</div>
       <div className="field">
-        <label>種類</label>
-        <div className="cats">{CATEGORIES[kind].map((c) => <button key={c} className={c === category ? "on" : ""} onClick={() => setCategory(c)}>{c}</button>)}</div>
+        <label>{isVoice ? "分野" : "種類"}</label>
+        <div className="cats">{CATEGORIES[kind].map((c) => <button key={c} className={c === category ? "on" : ""} onClick={() => setCategory(c)}>{isVoice && <i className="dot" style={{ background: fieldOf(c).color }} />}{c}</button>)}</div>
       </div>
-      {kind === "kaizen" && (
+      {isVoice && (
         <div className="field">
           <label htmlFor="branch">支店</label>
           <select id="branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
@@ -207,10 +213,31 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
         </div>
       )}
       <div className="field">
-        <label htmlFor="body">{kind === "hitokoto" ? "ひとこと（140字まで）" : kind === "kaizen" ? "困っていること・こうしたいこと" : "お知らせの本文（500字まで）"}</label>
-        <textarea id="body" rows={4} maxLength={maxLen} value={body} onChange={(e) => setBody(e.target.value)} placeholder={kind === "hitokoto" ? "例：今日の納車、ご家族みんなで来てくださいました" : kind === "kaizen" ? "例：代車の空きが営業から見えない" : "例：今月の安全運転講習の様子を動画で公開しました"} />
+        <label htmlFor="body">{kind === "hitokoto" ? "ひとこと（140字まで）" : kind === "kaizen" ? "困っていること・こうしたいこと（140字まで）" : kind === "report" ? "何が課題で、どう改善したか（200字まで）" : "お知らせの本文（500字まで）"}</label>
+        <textarea id="body" rows={4} maxLength={maxLen} value={body} onChange={(e) => setBody(e.target.value)} placeholder={kind === "hitokoto" ? "例：今日の納車、ご家族みんなで来てくださいました" : kind === "kaizen" ? "例：代車の空きが営業から見えない" : kind === "report" ? "例：納車の説明で漏れが出るため、チェックシート1枚にまとめた" : "例：今月の安全運転講習の様子を動画で公開しました"} />
         <div className="muted" style={{ textAlign: "right" }}>{body.length}/{maxLen}</div>
       </div>
+      {kind === "report" && (
+        <div className="field">
+          <label htmlFor="effect">効果（任意・80字まで）</label>
+          <input id="effect" value={effect} maxLength={80} onChange={(e) => setEffect(e.target.value)} placeholder="例：説明漏れの指摘がなくなった" />
+        </div>
+      )}
+      {isVoice && (
+        <div className="field">
+          <label htmlFor="coauthor">一緒に取り組んだ人（任意・3人まで）</label>
+          <select id="coauthor" value="" disabled={coAuthors.length >= 3} onChange={(e) => { if (e.target.value) setCoAuthors((c) => [...c, e.target.value]); }}>
+            <option value="">人を選んで追加</option>
+            {[...people.values()].filter((p) => p.id !== me.id && !coAuthors.includes(p.id)).sort((a, b) => a.fullName.localeCompare(b.fullName, "ja")).map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
+          </select>
+          {coAuthors.length > 0 && (
+            <div className="filter-tags" style={{ marginTop: 8 }}>
+              {coAuthors.map((id) => <button key={id} type="button" className="ftag" onClick={() => setCoAuthors((c) => c.filter((x) => x !== id))} aria-label={`${people.get(id)?.fullName}さんを外す`}>{people.get(id)?.fullName}<span aria-hidden>×</span></button>)}
+            </div>
+          )}
+          <p className="muted" style={{ marginTop: 6 }}>別の支店の人と取り組んだ事例は、声マップで拠点どうしがつながります。</p>
+        </div>
+      )}
       {kind === "hitokoto" && (
         <label className="secondary" style={{ display: "block", textAlign: "center" }}>
           {photo ? "写真を変更" : "写真を1枚追加"}
@@ -252,7 +279,7 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
       {pii.length > 0 && <div className="warn">{pii.join("・")}が含まれている可能性があります。お客様の個人情報は書かないでください。</div>}
       <p className="muted" style={{ marginTop: 10 }}>お客様の氏名・車両番号など個人情報は書かないでください。</p>
       <ErrorBox error={error} />
-      <button className="primary" onClick={submit} disabled={busy || !body.trim()}>{kind === "hitokoto" ? "投稿する" : kind === "kaizen" ? "送信する" : "公開する"}</button>
+      <button className="primary" onClick={submit} disabled={busy || !body.trim()}>{kind === "hitokoto" ? "投稿する" : kind === "kaizen" ? "送信する" : kind === "report" ? "共有する" : "公開する"}</button>
     </>
   );
 }

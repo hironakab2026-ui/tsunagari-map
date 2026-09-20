@@ -86,7 +86,12 @@ export interface SeatOccupancy {
   personIds: string[];  // group 席は複数人になりうる
 }
 
-export type PostKind = "hitokoto" | "kaizen" | "official";
+/**
+ * 投稿の種類。
+ * kaizen = 要改善事項（これから改善したいこと。対応の進み具合を公開する）
+ * report = 業務改善報告（すでに改善した事例の簡略版。共有して、ほかの拠点でも使えるようにする）
+ */
+export type PostKind = "hitokoto" | "kaizen" | "report" | "official";
 export type KaizenStatus = "received" | "reviewing" | "inProgress" | "done";
 
 export const KAIZEN_STATUS_LABEL: Record<KaizenStatus, string> = {
@@ -111,9 +116,12 @@ export interface Post {
   // 公式ニュース（official）のみ。動画部門向けの動画リンク
   mediaType?: "image" | "video";
   mediaUrl?: string;
-  // 改善の声のみ
+  // 業務改善報告（report）のみ。改善した結果どうなったか
+  effect?: string;
+  // 要改善事項（kaizen）のみ
   status?: KaizenStatus;
   assignedTo?: string;
+  /** 要改善事項・業務改善報告。一緒に取り組んだ人。拠点をまたぐと、声マップで拠点どうしが線で結ばれる */
   coAuthorIds?: string[];
 }
 

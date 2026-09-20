@@ -3,6 +3,7 @@ import { Switch } from "./common";
 
 const STATUS_OPTIONS: Record<PostKind, [PostStatusFilter, string][]> = {
   kaizen: [["all", "すべて"], ["done", "解決済み"], ["progress", "対応中"]],
+  report: [["all", "すべて"]],
   hitokoto: [["all", "すべて"], ["shared", "共有済み"], ["unshared", "まだ共有していない"]],
   official: [["all", "すべて"]],
 };
@@ -68,12 +69,12 @@ export function PostFilterBar({ kind, categories, branches, filter, open, onOpen
       <div id="filter-panel" className={`filter-panel ${open ? "open" : ""}`}>
         <div>
           <div className="filter-body">
-            {kind !== "official" && (
+            {kind !== "official" && kind !== "report" && (
               <div className="fgroup"><span className="flabel">状態</span><Chips label="状態" value={filter.status} options={STATUS_OPTIONS[kind]} onChange={(v) => onChange({ status: v })} /></div>
             )}
             <div className="fgroup">
-              <span className="flabel">種類</span>
-              <Chips label="種類" value={filter.category ?? "all"} options={[["all", "すべて"], ...categories.map((c): [string, string] => [c, c])]} onChange={(v) => onChange({ category: v === "all" ? null : v })} />
+              <span className="flabel">{kind === "kaizen" || kind === "report" ? "分野" : "種類"}</span>
+              <Chips label="種類・分野" value={filter.category ?? "all"} options={[["all", "すべて"], ...categories.map((c): [string, string] => [c, c])]} onChange={(v) => onChange({ category: v === "all" ? null : v })} />
             </div>
             <div className="fgroup">
               <span className="flabel"><label htmlFor="filter-branch">支店</label></span>

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { DEPT_LABEL, type Dept, type Person } from "@tsunagari/shared";
+import { DEPT_LABEL, fieldOf, type Dept, type Person } from "@tsunagari/shared";
 
 export const DEPT_COLOR: Record<Dept, string> = {
   sales: "var(--sales)",
@@ -29,6 +29,12 @@ export function Avatar({ person, size = 40, presence = true }: {
     </span>
   );
 }
+/** 分野（お客様対応・安全など）の色つきラベル。声マップの円グラフの色と同じ */
+export function FieldChip({ category }: { category: string }) {
+  const f = fieldOf(category);
+  return <span className="field-chip" style={{ ["--fc" as string]: f.color }}>{f.label}</span>;
+}
+
 export function DeptDot({ dept }: { dept: Dept }) {
   return <i className="dot" style={{ background: DEPT_COLOR[dept] }} title={DEPT_LABEL[dept]} />;
 }

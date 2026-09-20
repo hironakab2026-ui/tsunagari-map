@@ -78,7 +78,7 @@ nav.tabs button:active img{scale:.8}
 .topic-official{background:var(--sky-100);color:var(--sky-deep)}
 .topic-branch{background:var(--brand-soft);color:var(--brand-deep)}
 .seg{display:flex;background:rgba(255,255,255,.65);border-radius:999px;padding:4px;margin:0 0 12px;box-shadow:inset 0 1px 3px rgba(45,111,132,.18)}
-.seg button{flex:1;padding:9px 6px;border-radius:999px;font-size:13px;color:var(--muted);min-height:38px;font-weight:700;transition:background-color .25s,color .25s,box-shadow .25s}
+.seg button{flex:1;padding:9px 2px;border-radius:999px;font-size:12.5px;white-space:nowrap;color:var(--muted);min-height:38px;font-weight:700;transition:background-color .25s,color .25s,box-shadow .25s}
 .seg button.on{background:#fff;color:var(--brand-deep);font-weight:900;box-shadow:0 2px 0 rgba(63,122,38,.25),0 1px 4px rgba(45,111,132,.2)}
 
 /* アイコン：所属の色は縁に使う。写真・頭文字の色とぶつからない */
@@ -388,3 +388,13 @@ button.seat:active{transform:scale(.97)}
 .status-select{min-height:34px;padding:5px 30px 5px 12px;font-size:12px;border-radius:999px}
 input[type=number]{text-align:center;padding:8px 6px}
 .field select,.sheet select,.fgroup select{padding-right:36px}
+
+/* 分野の色分け（声マップの円グラフと同じ色） */
+.field-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:999px;background:#F3EEE3;background:color-mix(in srgb,var(--fc) 16%,#fff);color:var(--ink)}
+.field-chip::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--fc)}
+.field-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin:8px 2px 0}
+.field-legend.tight{margin:6px 0 0}
+.field-legend .dot{margin-right:4px}
+.cats button .dot{margin-right:6px}
+.effect{display:flex;gap:8px;align-items:baseline;margin-top:6px;padding:8px 12px;border-radius:14px;background:var(--brand-soft);color:var(--brand-deep);font-size:12.5px;font-weight:700;line-height:1.5}
+.effect b{flex-shrink:0;font-size:11px;background:var(--brand-deep);color:#fff;border-radius:999px;padding:1px 8px}

@@ -347,23 +347,37 @@ export class Service {
   async createPost(user: User, input: {
     kind: PostKind; category: string; body: string; anonymous?: boolean; photoDataUrl?: string;
     branchId?: string; mediaType?: "image" | "video"; mediaUrl?: string; mediaDataUrl?: string;
+    effect?: string; coAuthorIds?: string[];
   }) {
     const me = await this.me(user);
-    if (!["hitokoto", "kaizen", "official"].includes(input.kind)) throw new HttpError(400, "投稿の種類が不正です");
+    if (!["hitokoto", "kaizen", "report", "official"].includes(input.kind)) throw new HttpError(400, "投稿の種類が不正です");
     if (input.kind === "official") requireRole(user, "PR");
 
     const body = (input.body ?? "").trim();
     if (!body) throw new HttpError(400, "本文を入力してください");
-    const maxLen = input.kind === "official" ? 500 : 140;
+    const maxLen = input.kind === "official" ? 500 : input.kind === "report" ? 200 : 140;
     if (body.length > maxLen) throw new HttpError(400, `${maxLen}字以内で入力してください`);
     const anonymous = input.kind === "kaizen" && !!input.anonymous;
     const id = randomUUID();
 
     let branchId = me.branchId;
-    if (input.kind === "kaizen" && input.branchId) {
+    const isVoice = input.kind === "kaizen" || input.kind === "report"; // 声マップの対象
+    if (isVoice && input.branchId) {
       const branches = await this.store.list<Branch>("Branches");
       if (!branches.some((b) => b.id === input.branchId)) throw new HttpError(400, "支店の指定が正しくありません");
       branchId = input.branchId;
+    }
+
+    let effect: string | undefined;
+    if (input.kind === "report") {
+      effect = (input.effect ?? "").trim();
+      if (effect.length > 80) throw new HttpError(400, "効果は80字以内で入力してください");
+    }
+    let coAuthorIds: string[] | undefined;
+    if (isVoice && input.coAuthorIds?.length) {
+      const ids = [...new Set(input.coAuthorIds)].filter((id) => id !== me.id).slice(0, 3);
+      for (const id of ids) if (!(await this.store.get<Person>("People", id))) throw new HttpError(400, "一緒に取り組んだ人の指定が正しくありません");
+      if (ids.length) coAuthorIds = ids;
     }
 
     let photoUrl: string | undefined;
@@ -400,6 +414,8 @@ export class Service {
       branchId, createdAt: new Date().toISOString(), reactions: 0,
       ...(mediaUrl ? { mediaType: mediaType ?? "video", mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(body, input.category, rules).department } : {}),
+      ...(effect ? { effect } : {}),
+      ...(coAuthorIds ? { coAuthorIds } : {}),
     };
     await this.store.put("Posts", id, input.kind, post);
     // 匿名投稿の投稿者は、閲覧を管理者に限定した監査リストにだけ保存する（要件定義書 11章 匿名性）
@@ -474,6 +490,7 @@ export class Service {
       await this.store.put("People", demo.id, demo.branchId, demo);
     }
     await this.seedDemoVoices();
+    await this.seedDemoReports();
     await this.seedDemoExtras(demoUserId);
     if ((await this.occupancyToday("hq")).size > 0) return;
     const today = todayJst();
@@ -496,6 +513,37 @@ export class Service {
     }
   }
 
+  /** デモ表示用：業務改善報告（すでに改善した事例）。拠点をまたいで一緒に取り組んだ例も入れる。すでに入っていれば何もしない */
+  private async seedDemoReports() {
+    if (await this.store.get<Post>("Posts", "demo-r01")) return;
+    // [id, 投稿者, 支店, 分野, 内容, 効果, 拍手, 何日前, 一緒に取り組んだ人]
+    type R = [string, string, string, string, string, string, number, number, string[]?];
+    const rows: R[] = [
+      ["r01", "v01", "a", "お客様対応", "納車時の説明を、1枚のチェックシートにまとめた。", "説明漏れの指摘がなくなった", 14, 2, ["v04"]],
+      ["r02", "v02", "a", "品質・整備", "点検結果を、写真つきでタブレットで見せるようにした。", "お客様の納得が早くなった", 11, 5],
+      ["r03", "v03", "b", "業務の効率化", "リース契約書の置き場を1か所にまとめた。", "探す時間が1件5分減った", 9, 3, ["v06"]],
+      ["r04", "v04", "b", "品質・整備", "EV診断の手順を動画にして共有した。", "新人でも同じ品質で対応できた", 17, 8, ["v01"]],
+      ["r05", "v05", "c", "設備・環境", "板金ブースに送風機を追加した。", "夏場の作業の負担が減った", 8, 12],
+      ["r06", "v06", "c", "お客様対応", "査定額の説明用シートを作った。", "商談の成約が増えた", 13, 6, ["v09"]],
+      ["r07", "v07", "d", "業務の効率化", "代車の空きを、共有カレンダーで見られるようにした。", "電話での確認がいらなくなった", 21, 4, ["v08", "v04"]],
+      ["r08", "v08", "d", "安全", "ピットの通路に、足元のラインを引いた。", "つまずきそうになる場面が減った", 10, 15],
+      ["r09", "v09", "e", "お客様対応", "初めてのお客様向けの案内を作り直した。", "同じ質問が半分になった", 12, 7],
+      ["r10", "v10", "e", "品質・整備", "整備の待ち時間に見られる作業動画を用意した。", "待ち時間の不満が減った", 15, 9, ["v02"]],
+      ["r11", "u12", "hq", "業務の効率化", "経費精算のよくある質問を、社内ポータルにまとめた。", "問い合わせが月10件減った", 9, 10, ["v07"]],
+      ["r12", "u02", "hq", "安全", "工具の置き場所を色分けした。", "工具を探す手間が減った", 7, 13],
+      ["r13", "u11", "hq", "お客様対応", "免許返納の相談用の資料を1枚にまとめた。", "相談の時間が短くなった", 11, 1],
+      ["r14", "u03", "hq", "設備・環境", "2Fの複合機の用紙補充の当番を決めた。", "用紙切れがなくなった", 5, 18],
+    ];
+    const now = Date.now();
+    for (const [id, authorId, branchId, category, body, effect, reactions, daysAgo, coAuthorIds] of rows) {
+      const author = await this.store.get<Person>("People", authorId);
+      const post: Post = {
+        id: `demo-${id}`, kind: "report", authorId, authorDept: author?.dept ?? null, branchId, category, body, effect, reactions,
+        createdAt: new Date(now - daysAgo * 86400_000).toISOString(), ...(coAuthorIds ? { coAuthorIds } : {}),
+      };
+      await this.store.put("Posts", post.id, "report", post);
+    }
+  }
   /** デモ表示用：ギャラリーの写真つき投稿、共有タスク、チャットの例。すでに入っていれば何もしない */
   private async seedDemoExtras(demoUserId: string) {
     if (await this.store.get<Post>("Posts", "demo-g01")) return;
@@ -564,13 +612,13 @@ export class Service {
       ["h10", "hitokoto", "v09", "e", "お客様の笑顔", "初めて車を買うお客様が「ここで良かった」と言ってくれました。", 19, 1],
       ["h11", "hitokoto", "v10", "e", "できごと", "整備の待ち時間に見られる、作業の動画を作ってみました。", 13, 7],
       ["h12", "hitokoto", "u12", "hq", "できごと", "経費精算のよくある質問を、社内ポータルにまとめました。", 6, 10],
-      ["k01", "kaizen", "v07", "d", "業務の手間", "営業が代車の空きを電話で確認している。サービスと同じ画面で見られると助かる。", 22, 12, "inProgress", "サービス部", ["v04"]],
+      ["k01", "kaizen", "v07", "d", "業務の効率化", "営業が代車の空きを電話で確認している。サービスと同じ画面で見られると助かる。", 22, 12, "inProgress", "サービス部", ["v04"]],
       ["k02", "kaizen", "v02", "a", "お客様対応", "点検の説明を、営業とエンジニアが一緒にお客様へ伝える場を作りたい。", 16, 15, "reviewing", "サービス部", ["v06"]],
       ["k03", "kaizen", "v09", "e", "お客様対応", "納車前の最終確認を、営業とサービスで同じチェック表にしたい。", 12, 6, "received", "サービス部", ["v10"]],
-      ["k04", "kaizen", "v05", "c", "設備", "板金ブースの換気が足りず、夏場に作業しづらい。", 9, 20, "done", "総務"],
-      ["k05", "kaizen", "v03", "b", "業務の手間", "リース契約の書類を、店舗ごとに別々に管理している。共通の置き場が欲しい。", 14, 11, "inProgress", "営業企画"],
+      ["k04", "kaizen", "v05", "c", "設備・環境", "板金ブースの換気が足りず、夏場に作業しづらい。", 9, 20, "done", "総務"],
+      ["k05", "kaizen", "v03", "b", "業務の効率化", "リース契約の書類を、店舗ごとに別々に管理している。共通の置き場が欲しい。", 14, 11, "inProgress", "営業企画"],
       ["k06", "kaizen", "v01", "a", "安全", "店の駐車場の出入口が見えにくく、ひやりとした。ミラーをつけたい。", 18, 4, "received", "安全衛生委員会"],
-      ["k07", "kaizen", "v08", "d", "設備", "工具の置き場が足りない。共用の棚を増やしたい。", 7, 25, "done", "総務"],
+      ["k07", "kaizen", "v08", "d", "設備・環境", "工具の置き場が足りない。共用の棚を増やしたい。", 7, 25, "done", "総務"],
     ];
     const now = Date.now();
     for (const [id, kind, authorId, branchId, category, body, reactions, daysAgo, status, assignedTo, coAuthorIds] of rows) {

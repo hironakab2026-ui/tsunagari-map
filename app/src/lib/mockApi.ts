@@ -1,6 +1,6 @@
 import {
   SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS,
-  aggregateVoiceMap, buildSeatsFromConfig, drawSeat, routeKaizen,
+  IMPROVEMENT_FIELDS, aggregateVoiceMap, buildSeatsFromConfig, drawSeat, routeKaizen,
   type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig,
 } from "@tsunagari/shared";
 import { threadIdOf, type ChatMessage, type ChatThread, type SharedTask } from "@tsunagari/shared";
@@ -161,7 +161,8 @@ export class MockApi implements Api {
     if (input.kind === "official" && !this.roles().includes("PR")) throw new Error("この操作を行う権限がありません");
     const me = this.currentPerson();
     const anonymous = input.kind === "kaizen" && !!input.anonymous;
-    const branchId = input.kind === "kaizen" && input.branchId ? input.branchId : me.branchId;
+    const isVoice = input.kind === "kaizen" || input.kind === "report";
+    const branchId = isVoice && input.branchId ? input.branchId : me.branchId;
     const post: Post = {
       id: `p${Date.now()}`, kind: input.kind, category: input.category, body: input.body,
       authorId: anonymous ? null : ME, authorDept: anonymous ? null : me.dept, branchId,
@@ -170,6 +171,8 @@ export class MockApi implements Api {
         ? { mediaType: input.mediaDataUrl.startsWith("data:video/") ? ("video" as const) : ("image" as const), mediaUrl: input.mediaDataUrl }
         : input.mediaUrl ? { mediaType: input.mediaType ?? "video", mediaUrl: input.mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(input.body, input.category).department } : {}),
+      ...(input.kind === "report" && input.effect?.trim() ? { effect: input.effect.trim() } : {}),
+      ...(isVoice && input.coAuthorIds?.length ? { coAuthorIds: input.coAuthorIds.filter((id) => id !== ME).slice(0, 3) } : {}),
     };
     this.postsData.unshift(post);
     return clone(post);
@@ -186,24 +189,22 @@ export class MockApi implements Api {
   }
   async voiceMap() {
     await wait();
-    // デモでは拠点ごとの件数を増やして見やすくする
+    // デモでは、拠点ごとに件数を足して、円の大きさと色分けが見やすいようにする [拠点, 要改善事項, 業務改善報告]
+    const plan: [string, number, number][] = [["hq", 5, 7], ["a", 3, 5], ["b", 4, 7], ["c", 2, 4], ["d", 3, 3], ["e", 1, 3]];
+    const labels = IMPROVEMENT_FIELDS.map((f) => f.label);
     const extra: Post[] = [];
-    const demo: [string, number, number, number, number][] = [["hq", 6, 4, 9, 5], ["a", 3, 5, 1, 3], ["b", 5, 6, 1, 6], ["c", 2, 7, 1, 2], ["d", 3, 2, 0, 4], ["e", 1, 2, 0, 1]];
-    for (const [b, s, e, o, k] of demo) {
-      const add = (dept: "sales" | "eng" | "office", n: number, kind: PostKind) => {
-        for (let i = 0; i < n; i++) extra.push({ id: `x${b}${dept}${kind}${i}`, kind, authorId: null, authorDept: dept, branchId: b, category: "", body: "", createdAt: "", reactions: 0 });
-      };
-      add("sales", s, "hitokoto"); add("eng", e, "hitokoto"); add("office", o, "hitokoto");
-      for (let i = 0; i < k; i++) extra.push({ id: `k${b}${i}`, kind: "kaizen", authorId: null, authorDept: "office", branchId: b, category: "", body: "", createdAt: "", reactions: 0 });
-    }
-    const people = this.peopleData.map((p) => (p.id === "u10" ? { ...p, branchId: "b" } : p.id === "u08" ? { ...p, branchId: "d" } : p));
-    const view = aggregateVoiceMap(this.branchesData, [...this.postsData, ...extra], people);
-    const latest = new Map(this.postsData.map((p) => [p.branchId, p.body.slice(0, 40)]));
+    plan.forEach(([b, issue, report], bi) => {
+      for (let i = 0; i < issue; i++) extra.push({ id: `xi${b}${i}`, kind: "kaizen", authorId: null, authorDept: null, branchId: b, category: labels[(i + bi) % labels.length], body: "", createdAt: "", reactions: 0 });
+      for (let i = 0; i < report; i++) extra.push({ id: `xr${b}${i}`, kind: "report", authorId: null, authorDept: null, branchId: b, category: labels[(i * 2 + bi) % labels.length], body: "", createdAt: "", reactions: 0 });
+    });
+    const view = aggregateVoiceMap(this.branchesData, [...this.postsData, ...extra], this.peopleData);
+    const latest = new Map(this.postsData.filter((p) => p.kind === "kaizen" || p.kind === "report").map((p) => [p.branchId, p.body.slice(0, 40)]));
     view.stats.forEach((s) => (s.latest = latest.has(s.branchId) ? [latest.get(s.branchId)!] : []));
-    view.collaborations.push(["a", "c"], ["hq", "a"]);
+    for (const pair of [["a", "c"], ["hq", "a"], ["b", "d"]] as [string, string][]) {
+      if (!view.collaborations.some(([x, y]) => x === pair[0] && y === pair[1])) view.collaborations.push(pair);
+    }
     return clone(view);
   }
-
   async heartbeat() { /* モックでは何もしない */ }
 
   async gallery(): Promise<GalleryItem[]> {

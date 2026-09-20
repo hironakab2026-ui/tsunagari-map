@@ -197,13 +197,14 @@ describe("Service", () => {
       expect(await svc.chatThreads(demo)).toMatchObject([{ personId: "u02", unread: 1 }]);
     });
 
-    it("声マップに全支店の投稿と、支店をまたぐ共同提案が出る", async () => {
+    it("声マップに全支店の要改善事項・業務改善報告と、支店をまたぐつながりが出る", async () => {
       await svc.seedDemoState("demo");
       const map = await svc.voiceMap();
-      expect(map.stats.every((s) => s.sales + s.eng + s.office > 0)).toBe(true);
-      expect(map.collaborations.some(([a, b]) => a !== b)).toBe(true);
+      expect(map.stats.every((s) => s.issue + s.report > 0)).toBe(true);
+      expect(map.stats.every((s) => Object.keys(s.fields.report).length > 0)).toBe(true);
+      expect(map.collaborations.length).toBeGreaterThan(0);
+      expect(map.collaborations.every(([a, b]) => a !== b)).toBe(true);
     });
-
     it("2回呼んでも投稿が重複しない", async () => {
       await svc.seedDemoState("demo");
       const first = (await svc.posts("hitokoto")).length;
@@ -319,6 +320,26 @@ describe("Service", () => {
       expect(await store.get("AnonymousAudit", post.id)).toMatchObject({ authorId: "u01" });
     });
 
+    it("業務改善報告は、分野・効果・一緒に取り組んだ人つきで投稿でき、投稿者の名前が残る", async () => {
+      const { post } = await svc.createPost(member, { kind: "report", category: "安全", body: "通路にラインを引いた", effect: " つまずきが減った ", branchId: "b", coAuthorIds: ["u02", "u01", "u02"] });
+      expect(post).toMatchObject({ kind: "report", authorId: "u01", branchId: "b", effect: "つまずきが減った", coAuthorIds: ["u02"] });
+      expect(post.status).toBeUndefined(); // 改善済みなので進み具合はない
+      expect((await svc.posts("report")).map((p) => p.id)).toContain(post.id);
+    });
+
+    it("業務改善報告は匿名にできず、長すぎる効果や存在しない共同者は受け付けない", async () => {
+      const { post } = await svc.createPost(member, { kind: "report", category: "安全", body: "x", anonymous: true });
+      expect(post.authorId).toBe("u01");
+      await expect(svc.createPost(member, { kind: "report", category: "安全", body: "x", effect: "あ".repeat(81) })).rejects.toThrow("80字");
+      await expect(svc.createPost(member, { kind: "report", category: "安全", body: "x", coAuthorIds: ["nobody"] })).rejects.toThrow("一緒に");
+    });
+
+    it("要改善事項に、他の拠点の人を共同者として付けると、声マップでつながる", async () => {
+      await svc.seedDemoState("demo");
+      await svc.createPost(member, { kind: "kaizen", category: "安全", body: "共同の提案", branchId: "e", coAuthorIds: ["v03"] });
+      const links = (await svc.voiceMap()).collaborations;
+      expect(links.some(([a, b]) => [a, b].includes("e") && [a, b].includes("b"))).toBe(true);
+    });
     it("改善の声は投稿時に支店を選べる", async () => {
       const { post } = await svc.createPost(member, { kind: "kaizen", category: "設備", body: "テスト投稿", branchId: "a" });
       expect(post.branchId).toBe("a");

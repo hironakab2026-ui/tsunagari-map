@@ -2,7 +2,7 @@ import type { Dept, Post } from "./types.js";
 
 export type PostTone = "done" | "progress" | "shared" | "unshared";
 
-/** 投稿の状態。改善の声は対応の進み具合、ひとこと投稿は社内ニュースで共有したかどうか */
+/** 投稿の状態。要改善事項は対応の進み具合、業務改善報告は改善済み、ひとこと投稿は社内ニュースで共有したかどうか */
 export function postStatus(p: Post): { label: string; tone: PostTone } {
   if (p.kind === "kaizen") {
     if (p.status === "done") return { label: "解決済み", tone: "done" };
@@ -10,6 +10,7 @@ export function postStatus(p: Post): { label: string; tone: PostTone } {
     if (p.status === "reviewing") return { label: "検討中", tone: "progress" };
     return { label: "受付済み（未対応）", tone: "progress" };
   }
+  if (p.kind === "report") return { label: "改善済み", tone: "done" };
   if (p.kind === "official") return { label: "共有済み（公式）", tone: "shared" };
   return p.pickedForNews ? { label: "共有済み（社内ニュース）", tone: "shared" } : { label: "まだ共有していない", tone: "unshared" };
 }

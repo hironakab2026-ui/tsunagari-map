@@ -11,7 +11,7 @@ export const DEFAULT_ROUTING_RULES: RoutingRule[] = [
   { department: "サービス部", keywords: ["代車", "点検", "整備", "車検", "部品", "ピット", "工具"], priority: 2 },
   { department: "営業企画", keywords: ["見積", "商談", "納車", "お客様", "試乗"], categories: ["お客様対応"], priority: 3 },
   { department: "情報システム", keywords: ["システム", "パソコン", "Teams", "アプリ", "ログイン", "Wi-Fi"], priority: 4 },
-  { department: "総務", keywords: ["複合機", "備品", "駐車場", "清掃", "空調"], categories: ["設備"], priority: 5 },
+  { department: "総務", keywords: ["複合機", "備品", "駐車場", "清掃", "空調"], categories: ["設備", "設備・環境"], priority: 5 },
 ];
 
 export const FALLBACK_DEPARTMENT = "総務";

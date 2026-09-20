@@ -1,4 +1,4 @@
-import type { Branch, ChatMessage, ChatThread, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig, SharedTask } from "@tsunagari/shared";
+import type { BranchStat, Branch, ChatMessage, ChatThread, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig, SharedTask } from "@tsunagari/shared";
 import { getSsoToken } from "./teams";
 import { MockApi } from "./mockApi";
 
@@ -8,19 +8,12 @@ export interface FloorView {
   assignments: Record<string, string[]>; // seatId -> 着席中の personId 配列
 }
 
-export interface BranchStat {
-  branchId: string;
-  sales: number;
-  eng: number;
-  office: number;
-  kaizen: number;
-  latest: string[];
-}
+export type { BranchStat };
 
 export interface VoiceMapView {
   branches: Branch[];
   stats: BranchStat[];
-  collaborations: [string, string][]; // 営業×エンジニア共同提案のあった拠点ペア
+  collaborations: [string, string][]; // 一緒に取り組んだ人が別の拠点にいる声のあった拠点ペア（つながり）
 }
 
 /** 共有タスク（一覧表示用）。完了した人の一覧は返さず、人数と自分の完了だけ返す */
@@ -45,6 +38,10 @@ export interface NewPost {
   mediaUrl?: string;
   /** 公式ニュースにアップロードする動画・画像（data URL） */
   mediaDataUrl?: string;
+  /** 業務改善報告：改善した結果どうなったか */
+  effect?: string;
+  /** 要改善事項・業務改善報告：一緒に取り組んだ人（3人まで） */
+  coAuthorIds?: string[];
 }
 
 export interface Api {

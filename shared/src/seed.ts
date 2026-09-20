@@ -51,8 +51,12 @@ export const SEED_POSTS: Post[] = [
   { id: "p4", kind: "hitokoto", authorId: "u05", authorDept: "office", branchId: "hq", category: "できごと", body: "朝礼のあと、休憩スペースの飾りつけをしました。", createdAt: today, reactions: 8, photoUrl: "/gallery/room.jpg" },
   { id: "p6", kind: "hitokoto", authorId: "u09", authorDept: "office", branchId: "d", category: "できごと", body: "交通安全ポスターを貼りました。止まろう、横断歩道！", createdAt: today, reactions: 9, photoUrl: "/gallery/poster.jpg" },
   { id: "p5", kind: "hitokoto", authorId: "u01", authorDept: "sales", branchId: "hq", category: "お客様の笑顔", body: "展示コーナーの模様替え。ミニカーも並べました。", createdAt: today, reactions: 6, photoUrl: "/gallery/shelf.jpg" },
-  { id: "k1", kind: "kaizen", authorId: null, authorDept: null, branchId: "b", category: "業務の手間", body: "代車の空き状況を営業が電話で確認している。サービスと同じ画面で見られないか。", createdAt: today, reactions: 18, status: "inProgress", assignedTo: "サービス部", coAuthorIds: ["u08", "u10"] },
+  { id: "k1", kind: "kaizen", authorId: null, authorDept: null, branchId: "b", category: "業務の効率化", body: "代車の空き状況を営業が電話で確認している。サービスと同じ画面で見られないか。", createdAt: today, reactions: 18, status: "inProgress", assignedTo: "サービス部", coAuthorIds: ["u08", "u10"] },
   { id: "k2", kind: "kaizen", authorId: "u01", authorDept: "sales", branchId: "hq", category: "お客様対応", body: "点検の説明をエンジニアから直接聞きたいお客様が多い。短い動画で送れると良い。", createdAt: today, reactions: 9, status: "reviewing", assignedTo: "サービス部", coAuthorIds: ["u02"] },
-  { id: "k3", kind: "kaizen", authorId: "u06", authorDept: "office", branchId: "hq", category: "設備", body: "2Fの複合機の用紙切れが多い。補充当番を決めたい。", createdAt: today, reactions: 5, status: "done", assignedTo: "総務" },
+  { id: "k3", kind: "kaizen", authorId: "u06", authorDept: "office", branchId: "hq", category: "設備・環境", body: "2Fの複合機の用紙切れが多い。補充当番を決めたい。", createdAt: today, reactions: 5, status: "done", assignedTo: "総務" },
   { id: "n1", kind: "official", authorId: "u05", authorDept: "office", branchId: "hq", category: "お知らせ", body: "今月の安全運転講習は10月3日（金）に実施します。参加登録は各店の責任者まで。", createdAt: today, reactions: 7 },
-];
+  { id: "r1", kind: "report", authorId: "u04", authorDept: "sales", branchId: "hq", category: "お客様対応", body: "初めてのお客様向けの案内を1枚にまとめた。", effect: "同じ質問が半分になった", createdAt: today, reactions: 11 },
+  { id: "r2", kind: "report", authorId: "u02", authorDept: "eng", branchId: "hq", category: "品質・整備", body: "点検結果を写真つきで見せるようにした。", effect: "お客様の納得が早くなった", createdAt: today, reactions: 15, coAuthorIds: ["u01"] },
+  { id: "r3", kind: "report", authorId: "u06", authorDept: "office", branchId: "hq", category: "業務の効率化", body: "名義変更の書類のチェック表を作った。", effect: "書類の戻りが減った", createdAt: today, reactions: 8 },
+  { id: "r4", kind: "report", authorId: "u07", authorDept: "eng", branchId: "c", category: "安全", body: "ピットの通路に足元のラインを引いた。", effect: "つまずきそうになる場面が減った", createdAt: today, reactions: 10 },
+  { id: "r5", kind: "report", authorId: "u03", authorDept: "eng", branchId: "a", category: "設備・環境", body: "板金ブースに送風機を追加した。", effect: "夏場の作業の負担が減った", createdAt: today, reactions: 6 },];
