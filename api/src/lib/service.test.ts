@@ -43,6 +43,38 @@ describe("Service", () => {
       expect(again.seat).toBeDefined();
     });
 
+    it("同時に大勢が抽選しても、席の定員を超えず、同じ人が2席に座ることもない", async () => {
+      // hq は、グループ席3つ×4人＋プライベート席4つ＝16人分。20人が同時に押す
+      const users = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, email: "", name: `c${i}`, roles: [] }) as User);
+      const results = await Promise.allSettled(users.map((u) => svc.draw(u)));
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(16);
+      expect(results.filter((r) => r.status === "rejected")).toHaveLength(4); // 満席
+      const floor = await svc.floor(member);
+      for (const s of floor.seats) expect(floor.counts[s.id] ?? 0).toBeLessThanOrEqual(s.capacity);
+      const all = Object.values(floor.assignments).flat();
+      expect(new Set(all).size).toBe(all.length);
+      expect(all).toHaveLength(16);
+    });
+
+    it("席の使用状況は、座席マップに出さない設定の人も数に入れる（空席数・満席の判定）", async () => {
+      await svc.updateMe({ ...member, id: "u02" }, { nickname: "みさき" });
+      const u2: User = { id: "u02", email: "", name: "", roles: [] };
+      const { seat } = await svc.draw(u2);
+      const person = await store.get<import("@tsunagari/shared").Person>("People", "u02");
+      await store.put("People", "u02", "hq", { ...person!, showOnSeatMap: false });
+      const floor = await svc.floor(member);
+      expect(floor.assignments[seat.id]).toEqual([]); // 名前は出さない
+      expect(floor.counts[seat.id]).toBe(1); // でも、席は埋まっている
+    });
+
+    it("退席すると、重複して残っていた自分の着席もすべて消える", async () => {
+      const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      await store.put("Assignments", `hq-2F-1:${today}`, "hq", { branchId: "hq", seatId: "hq-2F-1", date: today, personIds: ["u01"] });
+      await store.put("Assignments", `hq-2F-2:${today}`, "hq", { branchId: "hq", seatId: "hq-2F-2", date: today, personIds: ["u01", "u02"] });
+      await svc.checkOut(member);
+      const floor = await svc.floor(member);
+      expect(Object.values(floor.assignments).flat()).toEqual(["u02"]);
+    });
     it("グループ席が全て満席ならプライベート席に割り当てる", async () => {
       // hq: グループ席3つ×定員4人 = 12人分埋める
       const fillers = Array.from({ length: 12 }, (_, i) => ({ id: `f${i}`, email: "", name: `f${i}`, roles: [] }) as User);
@@ -327,6 +359,27 @@ describe("Service", () => {
       expect((await svc.posts("report")).map((p) => p.id)).toContain(post.id);
     });
 
+    it("業務改善報告を改善報告書の項目で投稿すると、本文と効果は詳細から作られ、詳細も保存される", async () => {
+      const report = {
+        title: "納車説明のチェックシート導入", target: "店舗営業", categories: ["業務改善", "品質改善"],
+        periodStart: "2026-04-01", periodEnd: "2026-04-30",
+        background: "説明の漏れが月に3件あった。", cause: "担当者ごとに説明の順番が違った。", measures: "1枚のチェックシートにまとめ、全員で使うようにした。",
+        result: "漏れの指摘がなくなった。", followUp: "他店にも広げる。",
+      };
+      const { post } = await svc.createPost(member, { kind: "report", category: "お客様対応", body: "", branchId: "b", report });
+      expect(post.body).toBe("納車説明のチェックシート導入：1枚のチェックシートにまとめ、全員で使うようにした。");
+      expect(post.effect).toBe("漏れの指摘がなくなった。");
+      expect(post.report).toMatchObject({ title: "納車説明のチェックシート導入", categories: ["業務改善", "品質改善"], periodStart: "2026-04-01", cause: "担当者ごとに説明の順番が違った。" });
+      const saved = (await svc.posts("report")).find((p) => p.id === post.id);
+      expect(saved?.report?.background).toBe("説明の漏れが月に3件あった。");
+    });
+
+    it("改善報告書の必須項目が足りない・日付が不正なら、何が悪いか伝えて受け付けない", async () => {
+      const ok = { title: "t", background: "b", measures: "m", result: "r", categories: [] };
+      await expect(svc.createPost(member, { kind: "report", category: "安全", body: "", report: { ...ok, title: "" } })).rejects.toThrow("件名");
+      await expect(svc.createPost(member, { kind: "report", category: "安全", body: "", report: { ...ok, result: "" } })).rejects.toThrow("効果");
+      await expect(svc.createPost(member, { kind: "report", category: "安全", body: "", report: { ...ok, periodStart: "9月" } })).rejects.toThrow("日付");
+    });
     it("業務改善報告は匿名にできず、長すぎる効果や存在しない共同者は受け付けない", async () => {
       const { post } = await svc.createPost(member, { kind: "report", category: "安全", body: "x", anonymous: true });
       expect(post.authorId).toBe("u01");

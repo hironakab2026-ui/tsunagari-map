@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Person } from "@tsunagari/shared";
+import type { Person, Post } from "@tsunagari/shared";
 
 export interface AppCtx {
   me: Person;
@@ -13,6 +13,8 @@ export interface AppCtx {
   openChat: (personId?: string) => void;
   /** 投稿の作成画面を開く（写真をギャラリーに追加するときなど） */
   startPost: () => void;
+  /** 業務改善報告を、会社の改善報告書の形で表示する（Wordでダウンロードもできる） */
+  openReport: (post: Post) => void;
   /** 未読メッセージの数を取り直す */
   refreshChats: () => void;
   /** 今日働く支店。ホームの抽選と座席画面で共通 */

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DEPT_LABEL, EMPTY_POST_FILTER, IMPROVEMENT_FIELDS, fieldOf, KAIZEN_STATUS_LABEL, detectPii, filterPosts, routeKaizen, type Branch, type KaizenStatus, type Post, type PostFilter, type PostKind } from "@tsunagari/shared";
+import { DEPT_LABEL, EMPTY_POST_FILTER, IMPROVEMENT_FIELDS, REPORT_CATEGORIES, fieldOf, KAIZEN_STATUS_LABEL, detectPii, filterPosts, routeKaizen, type Branch, type KaizenStatus, type Post, type PostFilter, type PostKind, type ReportInput } from "@tsunagari/shared";
 import { PostFilterBar } from "../components/PostFilterBar";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
@@ -79,7 +79,7 @@ export function Voices({ composeOpen, setComposeOpen }: { composeOpen: boolean; 
 }
 
 function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map<string, string>; onChanged: () => void }) {
-  const { me, people, openCard } = useApp();
+  const { me, people, openCard, openReport } = useApp();
   const canManage = !!me.roles?.some((r) => r === "KaizenOwner" || r === "Admin");
   const author = post.authorId ? people.get(post.authorId) ?? null : null;
   const together = (post.coAuthorIds ?? []).map((id) => people.get(id)?.fullName).filter(Boolean);
@@ -106,7 +106,8 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
       </div>
       {(post.kind === "kaizen" || post.kind === "report") && <FieldChip category={post.category} />}
       {post.kind === "official" && <span className="chip" style={{ background: "#EEF0F2", color: "var(--ink)" }}>{post.category}</span>}
-      <div style={{ marginTop: 6 }}>{post.body}</div>
+      {post.report && <div className="rep-headline">{post.report.title}</div>}
+      <div style={{ marginTop: 6 }}>{post.report ? post.report.measures : post.body}</div>
       {post.photoUrl && <div className="photo"><AuthImage src={post.photoUrl} alt="投稿写真" /></div>}
       {post.effect && <div className="effect"><b>効果</b>{post.effect}</div>}
       {together.length > 0 && <div className="muted" style={{ marginTop: 4 }}>一緒に取り組んだ人：{together.join("・")}</div>}
@@ -122,6 +123,7 @@ function PostItem({ post, branchName, onChanged }: { post: Post; branchName: Map
           </div>
         </>
       )}
+      {post.kind === "report" && <button type="button" className="secondary rep-open" onClick={() => openReport(post)}>改善報告書を表示・Wordでダウンロード</button>}
       {post.kind !== "official" && <div className="post-foot"><button onClick={react}>{post.kind === "kaizen" ? "応援" : "👏"} {post.reactions}</button></div>}
     </article>
   );
@@ -146,9 +148,22 @@ function PostMedia({ post }: { post: Post }) {
 
 const MEDIA_MAX_MB = 30;
 
+/** 業務改善報告の、長い文章の入力欄（400字まで） */
+function RepText({ id, label, value, onChange, placeholder, required }: { id: string; label: string; value?: string; onChange: (v: string) => void; placeholder: string; required?: boolean }) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}{required && <b className="req">必須</b>}</label>
+      <textarea id={id} rows={3} maxLength={400} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <div className="muted" style={{ textAlign: "right" }}>{(value ?? "").length}/400</div>
+    </div>
+  );
+}
+
 function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch[]; onDone: () => void }) {
   const { me, people, toast, bumpData } = useApp();
-  const [effect, setEffect] = useState("");
+  // 業務改善報告は、会社の改善報告書の項目で入力する（あとで、そのままWordの報告書にできる）
+  const [rep, setRep] = useState<ReportInput>({ categories: [], target: me.unit ?? "" });
+  const setR = (patch: ReportInput) => setRep((r) => ({ ...r, ...patch }));
   const [coAuthors, setCoAuthors] = useState<string[]>([]);
   const isVoice = kind === "kaizen" || kind === "report"; // 声マップの対象（要改善事項・業務改善報告）
   const [category, setCategory] = useState(CATEGORIES[kind][0]);
@@ -162,7 +177,9 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const maxLen = kind === "official" ? 500 : kind === "report" ? 200 : 140;
-  const pii = detectPii(body);
+  const writtenText = kind === "report" ? [rep.title, rep.background, rep.cause, rep.measures, rep.result, rep.followUp].filter(Boolean).join("\n") : body;
+  const pii = detectPii(writtenText);
+  const reportReady = !!(rep.title?.trim() && rep.background?.trim() && rep.measures?.trim() && rep.result?.trim());
   const route = kind === "kaizen" && body ? routeKaizen(body, category) : null;
 
   const onPhoto = (file?: File) => {
@@ -183,9 +200,9 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
     setBusy(true); setError(null);
     try {
       await api.createPost({
-        kind, category, body, anonymous, photoDataUrl: photo,
+        kind, category, body: kind === "report" ? "" : body, anonymous, photoDataUrl: photo,
         branchId: isVoice ? branchId : undefined,
-        effect: kind === "report" ? effect.trim() || undefined : undefined,
+        report: kind === "report" ? rep : undefined,
         coAuthorIds: isVoice && coAuthors.length ? coAuthors : undefined,
         mediaDataUrl: kind === "official" ? mediaDataUrl : undefined,
         mediaUrl: kind === "official" && !mediaDataUrl && mediaUrl.trim() ? mediaUrl.trim() : undefined,
@@ -212,18 +229,42 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
           </select>
         </div>
       )}
-      <div className="field">
-        <label htmlFor="body">{kind === "hitokoto" ? "ひとこと（140字まで）" : kind === "kaizen" ? "困っていること・こうしたいこと（140字まで）" : kind === "report" ? "何が課題で、どう改善したか（200字まで）" : "お知らせの本文（500字まで）"}</label>
-        <textarea id="body" rows={4} maxLength={maxLen} value={body} onChange={(e) => setBody(e.target.value)} placeholder={kind === "hitokoto" ? "例：今日の納車、ご家族みんなで来てくださいました" : kind === "kaizen" ? "例：代車の空きが営業から見えない" : kind === "report" ? "例：納車の説明で漏れが出るため、チェックシート1枚にまとめた" : "例：今月の安全運転講習の様子を動画で公開しました"} />
-        <div className="muted" style={{ textAlign: "right" }}>{body.length}/{maxLen}</div>
-      </div>
-      {kind === "report" && (
+      {kind !== "report" && (
         <div className="field">
-          <label htmlFor="effect">効果（任意・80字まで）</label>
-          <input id="effect" value={effect} maxLength={80} onChange={(e) => setEffect(e.target.value)} placeholder="例：説明漏れの指摘がなくなった" />
+          <label htmlFor="body">{kind === "hitokoto" ? "ひとこと（140字まで）" : kind === "kaizen" ? "困っていること・こうしたいこと（140字まで）" : "お知らせの本文（500字まで）"}</label>
+          <textarea id="body" rows={4} maxLength={maxLen} value={body} onChange={(e) => setBody(e.target.value)} placeholder={kind === "hitokoto" ? "例：今日の納車、ご家族みんなで来てくださいました" : kind === "kaizen" ? "例：代車の空きが営業から見えない" : "例：今月の安全運転講習の様子を動画で公開しました"} />
+          <div className="muted" style={{ textAlign: "right" }}>{body.length}/{maxLen}</div>
         </div>
       )}
-      {isVoice && (
+      {kind === "report" && (
+        <>
+          <p className="muted" style={{ marginTop: 10 }}>書いた内容は、会社の「改善報告書」の項目にそのまま入り、Wordで保存できます。</p>
+          <div className="field"><label htmlFor="rp-title">件名（50字まで）<b className="req">必須</b></label><input id="rp-title" value={rep.title ?? ""} maxLength={50} onChange={(e) => setR({ title: e.target.value })} placeholder="例：納車時の説明チェックシートの導入について" /></div>
+          <div className="field"><label htmlFor="rp-target">対象業務・部署</label><input id="rp-target" value={rep.target ?? ""} maxLength={50} onChange={(e) => setR({ target: e.target.value })} placeholder="例：店舗営業" /></div>
+          <div className="field two">
+            <div><label htmlFor="rp-ps">改善実施期間（開始）</label><input id="rp-ps" type="date" value={rep.periodStart ?? ""} onChange={(e) => setR({ periodStart: e.target.value })} /></div>
+            <div><label htmlFor="rp-pe">改善実施期間（終了）</label><input id="rp-pe" type="date" value={rep.periodEnd ?? ""} onChange={(e) => setR({ periodEnd: e.target.value })} /></div>
+          </div>
+          <div className="field">
+            <label>改善区分（あてはまるものすべて）</label>
+            <div className="cats">
+              {REPORT_CATEGORIES.map((c) => {
+                const on = rep.categories?.includes(c);
+                return <button key={c} type="button" className={on ? "on" : ""} aria-pressed={!!on} onClick={() => setR({ categories: on ? (rep.categories ?? []).filter((x) => x !== c) : [...(rep.categories ?? []), c] })}>{c}</button>;
+              })}
+            </div>
+          </div>
+          <RepText id="rp-bg" label="1. 背景・現状（問題点）" required value={rep.background} onChange={(v) => setR({ background: v })} placeholder="改善前に何が問題だったか。数字があれば入れる（例：月間の検査ミス12件、1件あたり30分の手戻り）" />
+          <RepText id="rp-cause" label="2. 原因分析（直接原因・根本原因）" value={rep.cause} onChange={(v) => setR({ cause: v })} placeholder="直接の原因と、その奥にある原因" />
+          <RepText id="rp-measures" label="3. 改善策・実施した対策" required value={rep.measures} onChange={(v) => setR({ measures: v })} placeholder="誰が・何を・いつ・どこで・どうやって（5W1H）" />
+          <div className="field two">
+            <div><label htmlFor="rp-on">実施日</label><input id="rp-on" type="date" value={rep.implementedOn ?? ""} onChange={(e) => setR({ implementedOn: e.target.value })} /></div>
+            <div><label htmlFor="rp-who">実施担当（空なら投稿者）</label><input id="rp-who" value={rep.implementer ?? ""} maxLength={40} onChange={(e) => setR({ implementer: e.target.value })} /></div>
+          </div>
+          <RepText id="rp-result" label="4. 実施結果・効果" required value={rep.result} onChange={(v) => setR({ result: v })} placeholder="改善前後を数字で比べる（例：検査ミス 月12件 → 月2件）" />
+          <RepText id="rp-follow" label="5. 考察・再発防止・今後の対応" value={rep.followUp} onChange={(v) => setR({ followUp: v })} placeholder="残った課題や、ほかの拠点への展開の予定" />
+        </>
+      )}      {isVoice && (
         <div className="field">
           <label htmlFor="coauthor">一緒に取り組んだ人（任意・3人まで）</label>
           <select id="coauthor" value="" disabled={coAuthors.length >= 3} onChange={(e) => { if (e.target.value) setCoAuthors((c) => [...c, e.target.value]); }}>
@@ -279,7 +320,7 @@ function Composer({ kind, branches, onDone }: { kind: PostKind; branches: Branch
       {pii.length > 0 && <div className="warn">{pii.join("・")}が含まれている可能性があります。お客様の個人情報は書かないでください。</div>}
       <p className="muted" style={{ marginTop: 10 }}>お客様の氏名・車両番号など個人情報は書かないでください。</p>
       <ErrorBox error={error} />
-      <button className="primary" onClick={submit} disabled={busy || !body.trim()}>{kind === "hitokoto" ? "投稿する" : kind === "kaizen" ? "送信する" : kind === "report" ? "共有する" : "公開する"}</button>
+      <button className="primary" onClick={submit} disabled={busy || (kind === "report" ? !reportReady : !body.trim())}>{kind === "hitokoto" ? "投稿する" : kind === "kaizen" ? "送信する" : kind === "report" ? "共有する" : "公開する"}</button>
     </>
   );
 }

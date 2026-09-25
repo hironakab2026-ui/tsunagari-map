@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Person } from "@tsunagari/shared";
+import type { Person, Post } from "@tsunagari/shared";
 import { api } from "./lib/api";
 import { Ctx, type AppCtx } from "./lib/context";
 import { initHost } from "./lib/teams";
@@ -7,6 +7,7 @@ import { ErrorBox, Loading, Sheet } from "./components/common";
 import { ChatPanel } from "./components/ChatPanel";
 import { PersonCard } from "./components/PersonCard";
 import { QrCheckin } from "./components/QrCheckin";
+import { ReportView } from "./components/ReportView";
 import { Home } from "./screens/Home";
 import { Seats } from "./screens/Seats";
 import { Voices } from "./screens/Voices";
@@ -34,6 +35,7 @@ export function App() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [chat, setChat] = useState<{ peer?: string } | null>(null);
   const [unread, setUnread] = useState(0);
+  const [reportPost, setReportPost] = useState<Post | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [workBranch, setWorkBranchState] = useState<string | null>(() => {
@@ -116,6 +118,7 @@ export function App() {
     workBranch: workBranch ?? me.branchId, setWorkBranch,
     openChat: (peer?: string) => { setCardId(null); setChat({ peer }); },
     startPost: () => { setTab("voice"); setComposeOpen(true); },
+    openReport: setReportPost,
     refreshChats: () => { void refreshChats(); },
   }, [me, people, refreshMe, dataVersion, workBranch, setWorkBranch, refreshChats]);
 
@@ -166,6 +169,9 @@ export function App() {
         </Sheet>
         <Sheet open={!!chat} onClose={() => { setChat(null); void refreshChats(); }} label="チャット">
           {chat && <ChatPanel key={chat.peer ?? "list"} initialPeer={chat.peer} />}
+        </Sheet>
+        <Sheet open={!!reportPost} onClose={() => setReportPost(null)} label="改善報告書">
+          {reportPost && <ReportView key={reportPost.id} post={reportPost} />}
         </Sheet>
         <Sheet open={showOnboarding} onClose={() => { setShowOnboarding(false); setTab("card"); }} label="ようこそ">
           <div style={{ textAlign: "center", padding: "16px 10px" }}>

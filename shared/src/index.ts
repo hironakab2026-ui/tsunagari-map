@@ -6,6 +6,8 @@ export * from "./pii.js";
 export * from "./seed.js";
 export * from "./aggregate.js";
 export * from "./fields.js";
+export * from "./zip.js";
+export * from "./reportDoc.js";
 export * from "./postFilter.js";
 export * from "./presence.js";
 export * from "./chat.js";

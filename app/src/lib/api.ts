@@ -1,11 +1,12 @@
-import type { BranchStat, Branch, ChatMessage, ChatThread, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig, SharedTask } from "@tsunagari/shared";
+import type { BranchStat, ReportInput, Branch, ChatMessage, ChatThread, KaizenStatus, Person, Post, PostKind, Seat, SeatConfig, SharedTask } from "@tsunagari/shared";
 import { getSsoToken } from "./teams";
 import { MockApi } from "./mockApi";
 
 export interface FloorView {
   branch: Branch;
   seats: Seat[];
-  assignments: Record<string, string[]>; // seatId -> 着席中の personId 配列
+  assignments: Record<string, string[]>; // seatId -> 着席中の personId 配列（座席マップに出さない設定の人は含まない）
+  counts: Record<string, number>; // seatId -> 実際の着席人数（出さない設定の人も含む）
 }
 
 export type { BranchStat };
@@ -40,6 +41,8 @@ export interface NewPost {
   mediaDataUrl?: string;
   /** 業務改善報告：改善した結果どうなったか */
   effect?: string;
+  /** 業務改善報告：会社の改善報告書の項目（件名・背景・原因・改善策・結果など）。本文と効果はここから作られる */
+  report?: ReportInput;
   /** 要改善事項・業務改善報告：一緒に取り組んだ人（3人まで） */
   coAuthorIds?: string[];
 }

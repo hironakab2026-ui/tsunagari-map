@@ -1,6 +1,6 @@
 import {
   SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS,
-  IMPROVEMENT_FIELDS, aggregateVoiceMap, buildSeatsFromConfig, drawSeat, routeKaizen,
+  IMPROVEMENT_FIELDS, aggregateVoiceMap, composeReportBody, composeReportEffect, validateReportDetail, buildSeatsFromConfig, drawSeat, routeKaizen,
   type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig,
 } from "@tsunagari/shared";
 import { threadIdOf, type ChatMessage, type ChatThread, type SharedTask } from "@tsunagari/shared";
@@ -85,8 +85,12 @@ export class MockApi implements Api {
     const seats = this.seatsByBranch.get(bid)!;
     const hidden = new Set(this.peopleData.filter((p) => !p.showOnSeatMap && p.id !== ME).map((p) => p.id));
     const assignments: Record<string, string[]> = {};
-    for (const s of seats) assignments[s.id] = (this.occupancy[s.id] ?? []).filter((id) => !hidden.has(id));
-    return clone({ branch, seats, assignments });
+    const counts: Record<string, number> = {};
+    for (const s of seats) {
+      assignments[s.id] = (this.occupancy[s.id] ?? []).filter((id) => !hidden.has(id));
+      counts[s.id] = (this.occupancy[s.id] ?? []).length;
+    }
+    return clone({ branch, seats, assignments, counts });
   }
 
   private removeFromCurrentSeat() {
@@ -162,16 +166,22 @@ export class MockApi implements Api {
     const me = this.currentPerson();
     const anonymous = input.kind === "kaizen" && !!input.anonymous;
     const isVoice = input.kind === "kaizen" || input.kind === "report";
+    let detail;
+    if (input.kind === "report" && input.report) {
+      const v = validateReportDetail(input.report);
+      if (!v.ok) throw new Error(v.error);
+      detail = v.detail;
+    }
     const branchId = isVoice && input.branchId ? input.branchId : me.branchId;
     const post: Post = {
-      id: `p${Date.now()}`, kind: input.kind, category: input.category, body: input.body,
+      id: `p${Date.now()}`, kind: input.kind, category: input.category, body: detail ? composeReportBody(detail) : input.body,
       authorId: anonymous ? null : ME, authorDept: anonymous ? null : me.dept, branchId,
       createdAt: new Date().toISOString(), reactions: 0, photoUrl: input.photoDataUrl,
       ...(input.mediaDataUrl
         ? { mediaType: input.mediaDataUrl.startsWith("data:video/") ? ("video" as const) : ("image" as const), mediaUrl: input.mediaDataUrl }
         : input.mediaUrl ? { mediaType: input.mediaType ?? "video", mediaUrl: input.mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(input.body, input.category).department } : {}),
-      ...(input.kind === "report" && input.effect?.trim() ? { effect: input.effect.trim() } : {}),
+      ...(detail ? { report: detail, effect: composeReportEffect(detail) } : input.kind === "report" && input.effect?.trim() ? { effect: input.effect.trim() } : {}),
       ...(isVoice && input.coAuthorIds?.length ? { coAuthorIds: input.coAuthorIds.filter((id) => id !== ME).slice(0, 3) } : {}),
     };
     this.postsData.unshift(post);

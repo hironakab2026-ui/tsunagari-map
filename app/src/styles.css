@@ -405,3 +405,33 @@ input[type=number]{text-align:center;padding:8px 6px}
 .branch-detail{animation:fade-up .4s var(--ease-out) backwards}
 .map-bubble circle{transition:stroke-width .25s var(--ease-out),stroke .25s}
 .map-wrap line{animation:fade-in .6s ease-out backwards}
+
+/* 座席マップに名前を出さない人が座っている席も、「埋まっている」と分かるようにする */
+.seat-group .slot-taken{width:22px;height:22px;border-radius:50%;background:rgba(58,44,34,.32);box-shadow:inset 0 1px 3px rgba(58,44,34,.5)}
+.seat.taken{background:#F2EBDD;border-style:solid;box-shadow:none}
+.seat.taken .av{width:32px;height:32px;margin:0 auto 3px;border:2px solid #C9BDA6;background:transparent;color:var(--muted);font-size:12px}
+
+/* ===== 業務改善報告：入力欄・一覧の見出し ===== */
+.req{margin-left:6px;font-size:10px;font-weight:800;color:#fff;background:var(--pink-500);border-radius:999px;padding:1px 7px;vertical-align:1px}
+.field.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field.two label{font-size:11.5px}
+.rep-headline{margin-top:6px;font-size:14px;font-weight:900;line-height:1.5}
+.rep-open{margin-top:10px;min-height:42px;font-size:12.5px}
+
+/* ===== 改善報告書の表示（会社の様式にあわせた紙面） ===== */
+.rep-view .primary{margin-top:14px}
+.rep-paper{margin-top:12px;background:#fff;color:#1d2230;border:1px solid var(--line);border-radius:12px;padding:16px 10px 14px;font-family:"Yu Mincho","游明朝","Hiragino Mincho ProN","Noto Serif JP",serif;box-shadow:var(--shadow-card);overflow-x:auto}
+.rep-title{text-align:center;font-size:18px;letter-spacing:.35em;font-weight:700;margin:0 0 10px}
+.rep-meta{text-align:right;font-size:11px;margin-bottom:8px}
+.rep-to{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;margin-bottom:8px}
+table.rep{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px;border:1.5px solid #444b5a}
+table.rep th,table.rep td{border:1px solid #8a91a0;padding:5px 5px;vertical-align:top;line-height:1.55;word-break:break-word}
+table.rep th{background:#f1f2f6;font-weight:500;text-align:center;vertical-align:middle;font-size:9.5px;line-height:1.35}
+table.rep .rep-band{background:#e3e6ee;font-weight:700}
+table.rep .rep-body{min-height:44px;white-space:pre-wrap;height:52px}
+table.rep .rep-checks div{font-size:9.5px;line-height:1.5}
+table.rep .rep-sign td{height:78px;position:relative}
+table.rep .rep-sign small{font-size:10px;color:#555}
+table.rep .rep-sign em{position:absolute;right:8px;bottom:5px;font-style:normal;font-size:10px;color:#aaa}
+.rep-extras{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+@media (max-width:430px){.rep-extras{grid-template-columns:1fr}}

@@ -116,6 +116,9 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'Node|${nodeVersion}'
+      // storeKind=sqlite（デモ用）はデータがサーバー内のファイルにあるため、サーバーが複数に増えると、
+      // 抽選した席が別のサーバーには見えず、席の重複や表示のずれが起きる。デモは1台に固定する
+      functionAppScaleLimit: storeKind == 'sqlite' ? 1 : 0
       cors: {
         allowedOrigins: empty(corsOrigin) ? [] : [corsOrigin]
       }

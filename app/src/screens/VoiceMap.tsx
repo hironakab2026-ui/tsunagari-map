@@ -104,7 +104,7 @@ type Filter = PostStatusFilter;
 const FILTERS: [Filter, string][] = [["all", "すべて"], ["progress", "対応中"], ["done", "解決・改善済み"]];
 
 function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: string; mode: Mode }) {
-  const { people, dataVersion } = useApp();
+  const { people, dataVersion, openReport } = useApp();
   const [filter, setFilter] = useState<Filter>("all");
   const all = useAsync(async () => {
     const [k, r] = await Promise.all([api.posts("kaizen"), api.posts("report")]);
@@ -150,13 +150,15 @@ function BranchDetail({ stat, branchId, mode }: { stat: BranchStat; branchId: st
               </div>
               <span className={`st-pill ${st.tone}`} style={{ marginLeft: "auto" }}>{st.label}</span>
             </div>
-            <div>{p.body}</div>
+            {p.report && <div className="rep-headline">{p.report.title}</div>}
+            <div>{p.report ? p.report.measures : p.body}</div>
             {p.effect && <div className="effect"><b>効果</b>{p.effect}</div>}
             <div className="post-foot">
               <FieldChip category={p.category} />
               {p.kind === "kaizen" && p.assignedTo && <span>担当：{p.assignedTo}</span>}
               {together.length > 0 && <span>一緒に：{together.join("・")}</span>}
             </div>
+            {p.kind === "report" && <button type="button" className="secondary rep-open" onClick={() => openReport(p)}>改善報告書を表示・Wordでダウンロード</button>}
           </article>
         );
       })}

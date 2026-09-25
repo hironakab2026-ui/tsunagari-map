@@ -116,8 +116,10 @@ export interface Post {
   // 公式ニュース（official）のみ。動画部門向けの動画リンク
   mediaType?: "image" | "video";
   mediaUrl?: string;
-  // 業務改善報告（report）のみ。改善した結果どうなったか
+  // 業務改善報告（report）のみ。改善した結果どうなったか（一覧に出す短い版）
   effect?: string;
+  // 業務改善報告（report）のみ。会社の「改善報告書」にそのまま転記できる詳細。無い古い投稿は、本文などから自動で埋める
+  report?: ReportDetail;
   // 要改善事項（kaizen）のみ
   status?: KaizenStatus;
   assignedTo?: string;
@@ -152,4 +154,23 @@ export interface ChatThread {
   personId: string;      // 相手
   last: ChatMessage;
   unread: number;
+}
+
+/** 改善区分（会社の改善報告書のチェック欄） */
+export const REPORT_CATEGORIES = ["業務改善", "品質改善", "クレーム対応", "事故・トラブル対応", "その他"] as const;
+
+/** 業務改善報告の詳細。会社の「改善報告書」の記載項目に対応する */
+export interface ReportDetail {
+  title: string;          // 件名
+  target: string;         // 対象業務・部署
+  periodStart?: string;   // 改善実施期間（YYYY-MM-DD）
+  periodEnd?: string;
+  categories: string[];   // 改善区分
+  background: string;     // 1. 背景・現状（問題点）
+  cause: string;          // 2. 原因分析（直接原因・根本原因）
+  measures: string;       // 3. 改善策・実施した対策
+  implementedOn?: string; // 実施日（YYYY-MM-DD）
+  implementer?: string;   // 実施担当
+  result: string;         // 4. 実施結果・効果
+  followUp: string;       // 5. 考察・再発防止・今後の対応
 }

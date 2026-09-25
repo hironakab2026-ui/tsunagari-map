@@ -22,14 +22,15 @@ export function Home() {
   if (floor.loading && !floor.data) return <Loading />;
   if (floor.error || !floor.data) return <ErrorBox error={floor.error} />;
 
-  const { seats, assignments, branch } = floor.data;
+  const { seats, assignments, branch, counts } = floor.data;
   const mySeat = seats.find((s) => assignments[s.id]?.includes(me.id));
   const neighbors = mySeat
     ? (assignments[mySeat.id] ?? []).filter((id) => id !== me.id).map((id) => people.get(id)).filter((p): p is NonNullable<typeof p> => !!p)
     : [];
   const depts = [...new Set(neighbors.map((n) => DEPT_LABEL[n.dept]))].join("・");
   const totalCapacity = seats.reduce((n, s) => n + s.capacity, 0);
-  const occupied = Object.values(assignments).reduce((n, ids) => n + ids.length, 0);
+  // 空席の数は、座席マップに出さない設定の人も含めた実際の人数で数える
+  const occupied = Object.values(counts).reduce((n, c) => n + c, 0);
   // 支店ニュースのランダムは、日付と本人で固定する（画面を開き直しても急に変わらない）
   const seed = [...`${new Date().toDateString()}${me.id}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
   const topics = pickTopics({ tasks: tasks.data ?? [], official: official.data ?? [], hitokoto: news.data ?? [], branchId: me.branchId, seed });
@@ -37,7 +38,8 @@ export function Home() {
   // 抽選中は席番号がくるくる変わる演出を出す（結果が早く返っても、少し見せてから確定する）
   const draw = async () => {
     setBusy(true); setError(null);
-    const labels = seats.filter((s) => s.type === "normal").map((s) => s.label);
+    // 抽選中に回る番号は、いま空いている席だけ（埋まっている席は出さない）
+    const labels = seats.filter((s) => s.type === "normal" && (counts[s.id] ?? 0) < s.capacity).map((s) => s.label);
     let i = 0;
     const timer = setInterval(() => setRolling(labels[i++ % labels.length] ?? "?"), 90);
     try {

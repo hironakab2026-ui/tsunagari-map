@@ -1,7 +1,7 @@
 import {
   DEFAULT_ROUTING_RULES, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS,
-  CHAT_MAX_LENGTH, aggregateVoiceMap, buildSeatsFromConfig, detectPii, drawSeat, isOnline, routeKaizen, threadIdOf,
-  type Branch, type ChatMessage, type ChatThread, type KaizenStatus, type Person, type Post, type PostKind,
+  CHAT_MAX_LENGTH, aggregateVoiceMap, composeReportBody, composeReportEffect, validateReportDetail, buildSeatsFromConfig, detectPii, drawSeat, isOnline, routeKaizen, threadIdOf,
+  type Branch, type ReportDetail, type ReportInput, type ChatMessage, type ChatThread, type KaizenStatus, type Person, type Post, type PostKind,
   type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy, type SharedTask,
 } from "@tsunagari/shared";
 import { randomUUID } from "node:crypto";
@@ -25,6 +25,18 @@ export function todayJst(offsetDays = 0) {
 
 export class Service {
   constructor(private store: DocStore) {}
+
+  /**
+   * 着席まわりの書き込み（抽選・QR着席・退席・座席設定の変更）は、1つずつ順番に行う。
+   * 同時に大勢が押しても、「空席を調べる → 書く」の間に別の人が割り込んで、定員を超えたり、
+   * 同じ席に2人が入ったりしないようにするため。
+   */
+  private seatQueue: Promise<unknown> = Promise.resolve();
+  private serialized<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.seatQueue.then(fn, fn);
+    this.seatQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
 
   // ---------- 名刺 ----------
   async me(user: User): Promise<Person> {
@@ -96,7 +108,11 @@ export class Service {
     return branch.seatConfig;
   }
 
-  async updateSeatConfig(user: User, branchId: string, config: SeatConfig) {
+  updateSeatConfig(user: User, branchId: string, config: SeatConfig) {
+    return this.serialized(() => this.applySeatConfig(user, branchId, config));
+  }
+
+  private async applySeatConfig(user: User, branchId: string, config: SeatConfig) {
     if (!(await this.isSeatAdmin(user, branchId))) throw new HttpError(403, "この拠点の座席を編集する権限がありません");
     const validInt = (n: unknown, min: number, max: number) => Number.isInteger(n) && (n as number) >= min && (n as number) <= max;
     if (
@@ -175,65 +191,102 @@ export class Service {
     if (!branch) throw new HttpError(404, "拠点が見つかりません");
     const hidden = new Set(people.filter((p) => !p.showOnSeatMap && p.id !== user.id).map((p) => p.id));
     const assignments: Record<string, string[]> = {};
-    for (const s of seats) assignments[s.id] = (occupancy.get(s.id)?.personIds ?? []).filter((id) => !hidden.has(id));
-    return { branch, seats, assignments };
+    const counts: Record<string, number> = {}; // 座席マップに出さない設定の人も含めた、実際の着席人数（名前は含まない）
+    for (const s of seats) {
+      const ids = occupancy.get(s.id)?.personIds ?? [];
+      assignments[s.id] = ids.filter((id) => !hidden.has(id));
+      counts[s.id] = ids.length;
+    }
+    return { branch, seats, assignments, counts };
   }
 
-  /** その日の自分の席を離れる。どの拠点で着席していても解除できる */
-  async checkOut(user: User) {
+  /** その日の自分の席を離れる。どの拠点で着席していても解除できる。重複して残っている分もすべて消す */
+  checkOut(user: User) {
+    return this.serialized(() => this.leaveSeats(user.id));
+  }
+
+  /** 今日の着席をすべて外す。keepSeatId を指定すると、その席だけ残す（新しい席に着いたあと、前の席を空けるため） */
+  private async leaveSeats(personId: string, keepSeatId?: string) {
     const today = todayJst();
     const all = await this.store.list<SeatOccupancy>("Assignments");
-    const mine = all.find((o) => o.date === today && o.personIds.includes(user.id));
-    if (!mine) return;
-    const nextIds = mine.personIds.filter((id) => id !== user.id);
-    if (nextIds.length > 0) await this.store.put<SeatOccupancy>("Assignments", `${mine.seatId}:${mine.date}`, mine.branchId, { ...mine, personIds: nextIds });
-    else await this.store.remove("Assignments", `${mine.seatId}:${mine.date}`);
+    for (const mine of all.filter((o) => o.date === today && o.seatId !== keepSeatId && o.personIds.includes(personId))) {
+      const nextIds = mine.personIds.filter((id) => id !== personId);
+      if (nextIds.length > 0) await this.store.put<SeatOccupancy>("Assignments", `${mine.seatId}:${mine.date}`, mine.branchId, { ...mine, personIds: nextIds });
+      else await this.store.remove("Assignments", `${mine.seatId}:${mine.date}`);
+    }
+  }
+
+  /**
+   * 席に着く。書いた直後に読み直して、定員を超えていないか確かめる（複数のサーバーが同時に動いていても、
+   * 超えていたら自分の分を取り消して false を返す）。
+   */
+  private async takeSeat(seat: Seat, personId: string): Promise<boolean> {
+    const today = todayJst();
+    const key = `${seat.id}:${today}`;
+    const existing = await this.store.get<SeatOccupancy>("Assignments", key);
+    const occupants = [...new Set(existing?.personIds ?? [])].filter((id) => id !== personId);
+    if (occupants.length >= seat.capacity) return false;
+    await this.store.put<SeatOccupancy>("Assignments", key, seat.branchId, { branchId: seat.branchId, seatId: seat.id, date: today, personIds: [...occupants, personId] });
+    const after = await this.store.get<SeatOccupancy>("Assignments", key);
+    if (after && after.personIds.includes(personId) && after.personIds.length <= seat.capacity) return true;
+    // 同時に別の人が書き込んでいた。自分の分を取り消す
+    const rest = (after?.personIds ?? []).filter((id) => id !== personId);
+    if (rest.length > 0) await this.store.put<SeatOccupancy>("Assignments", key, seat.branchId, { ...(after ?? { branchId: seat.branchId, seatId: seat.id, date: today }), personIds: rest });
+    else await this.store.remove("Assignments", key);
+    return false;
   }
 
   /** QRコード・手入力で特定の席に着席する（集中席・固定席など、自分で席を選びたい場合） */
-  async checkIn(user: User, seatCode: string) {
-    if (!seatCode) throw new HttpError(400, "席番号を指定してください");
-    const me = await this.me(user);
-    const seats = await this.store.list<Seat>("Seats");
-    const code = seatCode.trim().toUpperCase();
-    const seat = seats.find((s) => s.id.toUpperCase() === code) ??
-      seats.find((s) => s.branchId === me.branchId && s.label.toUpperCase() === code);
-    if (!seat) throw new HttpError(404, `席「${seatCode}」が見つかりません。机のQRコードの下にある席番号を確認してください`);
-    await this.checkOut(user);
-    const today = todayJst();
-    const existing = await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`);
-    const occupants = existing?.personIds ?? [];
-    if (occupants.length >= seat.capacity) throw new HttpError(409, "この席は満席です");
-    await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
-      branchId: seat.branchId, seatId: seat.id, date: today, personIds: [...occupants, me.id],
+  checkIn(user: User, seatCode: string) {
+    return this.serialized(async () => {
+      if (!seatCode) throw new HttpError(400, "席番号を指定してください");
+      const me = await this.me(user);
+      const seats = await this.store.list<Seat>("Seats");
+      const code = seatCode.trim().toUpperCase();
+      const seat = seats.find((s) => s.id.toUpperCase() === code) ??
+        seats.find((s) => s.branchId === me.branchId && s.label.toUpperCase() === code);
+      if (!seat) throw new HttpError(404, `席「${seatCode}」が見つかりません。机のQRコードの下にある席番号を確認してください`);
+      // 移る先が満席なら、いま座っている席は残す
+      const today = todayJst();
+      const existing = await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`);
+      const others = (existing?.personIds ?? []).filter((id) => id !== me.id);
+      if (others.length >= seat.capacity) throw new HttpError(409, "この席は満席です");
+      if (!(await this.takeSeat(seat, me.id))) throw new HttpError(409, "この席は満席です");
+      await this.leaveSeats(user.id, seat.id);
+      return { seat };
     });
-    return { seat };
   }
 
-  /** ホーム画面の「抽選する」。選んだ支店（省略時は所属支店）の中でランダムに席を割り当てる。押したときだけ実行される */
-  async draw(user: User, branchId?: string) {
-    const me = await this.me(user);
-    const bid = branchId || me.branchId;
-    if (!(await this.store.get<Branch>("Branches", bid))) throw new HttpError(400, "支店の指定が正しくありません");
-    const seats = await this.seatsOf(bid);
-    const occupancyMap = await this.occupancyToday(bid);
-    // 自分が今座っている席は空きとして数える（引き直しても、空きがなければ元の席のまま残す）
-    const occupancy: Record<string, string[]> = {};
-    for (const [seatId, doc] of occupancyMap) occupancy[seatId] = doc.personIds.filter((id) => id !== me.id);
-    const result = drawSeat({ seats, occupancy, personId: me.id });
-    if (!result) throw new HttpError(409, "現在、空いている席がありません。しばらくしてから再度お試しください");
-    await this.checkOut(user);
-    const seat = seats.find((s) => s.id === result.seatId)!;
-    const today = todayJst();
-    const existing = await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`);
-    await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
-      branchId: seat.branchId, seatId: seat.id, date: today, personIds: [...(existing?.personIds ?? []), me.id],
+  /** ホーム画面の「抽選する」。選んだ支店（省略時は所属支店）の、空いている席の中からランダムに割り当てる。押したときだけ実行される */
+  draw(user: User, branchId?: string) {
+    return this.serialized(async () => {
+      const me = await this.me(user);
+      const bid = branchId || me.branchId;
+      if (!(await this.store.get<Branch>("Branches", bid))) throw new HttpError(400, "支店の指定が正しくありません");
+      const seats = await this.seatsOf(bid);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const occupancyMap = await this.occupancyToday(bid);
+        // 自分が今座っている席は空きとして数える（引き直しても、空きがなければ元の席のまま残す）
+        const occupancy: Record<string, string[]> = {};
+        for (const [seatId, doc] of occupancyMap) occupancy[seatId] = doc.personIds.filter((id) => id !== me.id);
+        const result = drawSeat({ seats, occupancy, personId: me.id });
+        if (!result) throw new HttpError(409, "現在、空いている席がありません。しばらくしてから再度お試しください");
+        const seat = seats.find((s) => s.id === result.seatId)!;
+        // 新しい席に着けたことを確かめてから、前の席を空ける（着けなかったときは、元の席が残る）
+        if (await this.takeSeat(seat, me.id)) {
+          await this.leaveSeats(user.id, seat.id);
+          return { seat };
+        }
+      }
+      throw new HttpError(409, "席を確保できませんでした。もう一度お試しください");
     });
-    return { seat };
   }
-
   /** 退勤時刻に全員の着席を解除（タイマーから呼ぶ） */
-  async checkOutEveryone() {
+  checkOutEveryone() {
+    return this.serialized(() => this.clearAllSeats());
+  }
+
+  private async clearAllSeats() {
     const today = todayJst();
     const all = await this.store.list<SeatOccupancy>("Assignments");
     let n = 0;
@@ -261,6 +314,7 @@ export class Service {
     if (!title) throw new HttpError(400, "タイトルを入力してください");
     if (title.length > 60) throw new HttpError(400, "タイトルは60字以内にしてください");
     const body = (input.body ?? "").trim();
+
     if (body.length > 300) throw new HttpError(400, "詳細は300字以内にしてください");
     if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new HttpError(400, "期限の日付が正しくありません");
     const task: SharedTask = {
@@ -347,15 +401,24 @@ export class Service {
   async createPost(user: User, input: {
     kind: PostKind; category: string; body: string; anonymous?: boolean; photoDataUrl?: string;
     branchId?: string; mediaType?: "image" | "video"; mediaUrl?: string; mediaDataUrl?: string;
-    effect?: string; coAuthorIds?: string[];
+    effect?: string; coAuthorIds?: string[]; report?: ReportInput;
   }) {
     const me = await this.me(user);
     if (!["hitokoto", "kaizen", "report", "official"].includes(input.kind)) throw new HttpError(400, "投稿の種類が不正です");
     if (input.kind === "official") requireRole(user, "PR");
 
-    const body = (input.body ?? "").trim();
+    // 業務改善報告は、会社の改善報告書の項目で受け取り、一覧に出す本文はそこから作る
+    let reportDetail: ReportDetail | undefined;
+    let rawBody = input.body;
+    if (input.kind === "report" && input.report) {
+      const v = validateReportDetail(input.report);
+      if (!v.ok) throw new HttpError(400, v.error);
+      reportDetail = v.detail;
+      rawBody = composeReportBody(v.detail);
+    }
+    const body = (rawBody ?? "").trim();
     if (!body) throw new HttpError(400, "本文を入力してください");
-    const maxLen = input.kind === "official" ? 500 : input.kind === "report" ? 200 : 140;
+    const maxLen = input.kind === "official" ? 500 : input.kind === "report" ? 200 : 140; // 業務改善報告の本文は、詳細から作るので常に200字以内
     if (body.length > maxLen) throw new HttpError(400, `${maxLen}字以内で入力してください`);
     const anonymous = input.kind === "kaizen" && !!input.anonymous;
     const id = randomUUID();
@@ -369,7 +432,9 @@ export class Service {
     }
 
     let effect: string | undefined;
-    if (input.kind === "report") {
+    if (reportDetail) {
+      effect = composeReportEffect(reportDetail);
+    } else if (input.kind === "report") {
       effect = (input.effect ?? "").trim();
       if (effect.length > 80) throw new HttpError(400, "効果は80字以内で入力してください");
     }
@@ -415,6 +480,7 @@ export class Service {
       ...(mediaUrl ? { mediaType: mediaType ?? "video", mediaUrl } : {}),
       ...(input.kind === "kaizen" ? { status: "received" as const, assignedTo: routeKaizen(body, input.category, rules).department } : {}),
       ...(effect ? { effect } : {}),
+      ...(reportDetail ? { report: reportDetail } : {}),
       ...(coAuthorIds ? { coAuthorIds } : {}),
     };
     await this.store.put("Posts", id, input.kind, post);
@@ -515,7 +581,37 @@ export class Service {
 
   /** デモ表示用：業務改善報告（すでに改善した事例）。拠点をまたいで一緒に取り組んだ例も入れる。すでに入っていれば何もしない */
   private async seedDemoReports() {
-    if (await this.store.get<Post>("Posts", "demo-r01")) return;
+    // 詳細つきの新しい形になっていれば、何もしない（古い形で入っていた場合は、入れ直して詳細を足す）
+    if ((await this.store.get<Post>("Posts", "demo-r01"))?.report) return;
+    // 改善報告書の詳細つきの例（一部の報告だけ。ほかは、本文と効果から報告書を自動で作る）
+    const details: Record<string, ReportDetail> = {
+      r01: {
+        title: "納車時の説明チェックシートの導入について", target: "A店 店舗営業", periodStart: "2026-07-01", periodEnd: "2026-07-31", categories: ["業務改善", "品質改善"],
+        background: "納車時の説明に漏れがあり、後日お客様から問い合わせをいただくことが月に3件ほどあった。",
+        cause: "担当者ごとに説明の順番や内容が違い、確認のしくみがなかった。",
+        measures: "納車時の説明項目を1枚のチェックシートにまとめ、7/8から全員が使うようにした。説明のあとにお客様にも確認の署名をいただく。",
+        implementedOn: "2026-07-08", implementer: "", result: "8月以降、説明漏れによる問い合わせはなくなった。", followUp: "他店にも展開する。3か月後に、問い合わせの件数を再確認する。",
+      },
+      r03: {
+        title: "リース契約書の置き場の一本化について", target: "B店 営業事務", periodStart: "2026-08-01", periodEnd: "2026-08-15", categories: ["業務改善"],
+        background: "リース契約書を店舗ごとに別々の場所で管理しており、探すのに時間がかかっていた。",
+        cause: "保管場所と名前のつけ方の決まりがなかった。", measures: "共有フォルダに置き場を一本化し、「年月_お客様番号」の名前で保存する決まりにした。",
+        implementedOn: "2026-08-05", implementer: "", result: "書類を探す時間が、1件あたり約5分短くなった。", followUp: "全店に同じ決まりを広げ、10月に運用状況を確認する。",
+      },
+      r07: {
+        title: "代車の空き状況を共有カレンダーで確認できるようにした件", target: "D店 サービス部・営業", periodStart: "2026-08-01", periodEnd: "2026-08-31", categories: ["業務改善", "品質改善"],
+        background: "営業が代車の空きをサービス部へ電話で確認しており、1日平均8件の電話が発生。確認待ちでお客様をお待たせすることがあった。",
+        cause: "代車の予約状況が、サービス部の紙の台帳にしかなく、営業から見えなかった。",
+        measures: "8/5に代車の予約を共有カレンダーに一本化し、営業・サービスの全員が見られるようにした。\n8/12から台帳への記入をやめ、運用を統一した。",
+        implementedOn: "2026-08-05", implementer: "", result: "電話での確認が1日8件からほぼ0件になり、お客様をお待たせする時間も減った。", followUp: "他店にも展開する。9月に各店へ手順書を配り、3か月後に効果を再確認する。",
+      },
+      r13: {
+        title: "免許返納の相談用資料の作成について", target: "本社 店舗営業", periodStart: "2026-09-01", periodEnd: "2026-09-10", categories: ["業務改善", "その他"],
+        background: "免許返納を考えるお客様の相談で、説明する内容が担当者ごとにばらつき、時間もかかっていた。",
+        cause: "使える資料が複数に分かれており、最新の制度の情報がまとまっていなかった。", measures: "制度の内容と、返納後の移動手段の例を1枚にまとめた資料を作り、全店に配布した。",
+        implementedOn: "2026-09-10", implementer: "", result: "相談1件あたりの説明時間が短くなり、説明の内容も統一できた。", followUp: "制度が変わったときに資料を更新する担当を決める。",
+      },
+    };
     // [id, 投稿者, 支店, 分野, 内容, 効果, 拍手, 何日前, 一緒に取り組んだ人]
     type R = [string, string, string, string, string, string, number, number, string[]?];
     const rows: R[] = [
@@ -540,6 +636,7 @@ export class Service {
       const post: Post = {
         id: `demo-${id}`, kind: "report", authorId, authorDept: author?.dept ?? null, branchId, category, body, effect, reactions,
         createdAt: new Date(now - daysAgo * 86400_000).toISOString(), ...(coAuthorIds ? { coAuthorIds } : {}),
+        ...(details[id] ? { report: details[id], body: composeReportBody(details[id]), effect: composeReportEffect(details[id]) } : {}),
       };
       await this.store.put("Posts", post.id, "report", post);
     }

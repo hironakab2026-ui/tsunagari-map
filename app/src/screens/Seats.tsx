@@ -37,7 +37,7 @@ function FloorMap({ branchId }: { branchId: string }) {
   const floor = useAsync(() => api.floor(branchId), [dataVersion, branchId]);
   if (floor.loading && !floor.data) return <Loading />;
   if (floor.error || !floor.data) return <ErrorBox error={floor.error} />;
-  const { seats, assignments, branch } = floor.data;
+  const { seats, assignments, branch, counts } = floor.data;
 
   const groupSeats = seats.filter((s) => s.kind === "group").sort((a, b) => a.number - b.number);
   const privateSeats = seats.filter((s) => s.kind === "private").sort((a, b) => a.number - b.number);
@@ -46,7 +46,7 @@ function FloorMap({ branchId }: { branchId: string }) {
     const p = people.get(pid);
     return !!(query && p && [...p.skills, p.unit].some((s) => s.includes(query)));
   };
-  const seatedCount = Object.values(assignments).reduce((n, ids) => n + ids.length, 0);
+  const seatedCount = Object.values(counts).reduce((n, c) => n + c, 0);
 
   return (
     <>
@@ -65,7 +65,9 @@ function FloorMap({ branchId }: { branchId: string }) {
             <div className="group-seats">
               {groupSeats.map((s) => {
                 const occupants = (assignments[s.id] ?? []).map((id) => people.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
-                const full = occupants.length >= s.capacity;
+                const taken = Math.max(counts[s.id] ?? 0, occupants.length); // 座席マップに出さない設定の人も、席は埋まっている
+                const hiddenCount = taken - occupants.length;
+                const full = taken >= s.capacity;
                 const anyHit = occupants.some((p) => isHit(p.id));
                 return (
                   <div key={s.id} className={`seat-group ${full ? "full" : ""} ${anyHit ? "hit" : ""} ${s.capacity > 9 ? "dense" : ""}`} style={groupSize(s.capacity)}>
@@ -76,7 +78,10 @@ function FloorMap({ branchId }: { branchId: string }) {
                           <Avatar person={p} size={22} />
                         </button>
                       ))}
-                      {Array.from({ length: s.capacity - occupants.length }).map((_, i) => (
+                      {Array.from({ length: hiddenCount }).map((_, i) => (
+                        <span key={`h${i}`} className="slot-taken" title="着席中" />
+                      ))}
+                      {Array.from({ length: Math.max(0, s.capacity - taken) }).map((_, i) => (
                         <span key={i} className="slot-empty" />
                       ))}
                     </div>
@@ -94,6 +99,7 @@ function FloorMap({ branchId }: { branchId: string }) {
               {privateSeats.map((s) => {
                 const pid = (assignments[s.id] ?? [])[0];
                 const p = pid ? people.get(pid) : undefined;
+                if (!p && (counts[s.id] ?? 0) > 0) return <div key={s.id} className="seat taken"><div className="av">席</div><div className="muted">{s.label}・使用中</div></div>;
                 if (!p) return <div key={s.id} className="seat empty"><div className="av">＋</div><div className="muted">{s.label}</div></div>;
                 return (
                   <button key={s.id} className={`seat ${isHit(p.id) ? "hit" : ""} ${p.id === me.id ? "me" : ""}`} onClick={() => openCard(p.id)} aria-label={`${s.label} ${p.fullName}さん`}>
