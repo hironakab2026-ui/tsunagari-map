@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Service } from "./service.js";
 import { MemoryStore } from "./store.js";
 import type { User } from "./auth.js";
@@ -253,6 +253,32 @@ describe("Service", () => {
     });
   });
 
+    describe("席の例（デモ）は消えない", () => {
+      afterEach(() => { vi.useRealTimers(); });
+      const demo: User = { id: "demo", email: "", name: "", roles: [] };
+      const seatedIds = async () => Object.values((await svc.floor(demo)).assignments).flat();
+
+      it("毎日の一斉退席をしても、席の例の人は残り、ふつうの利用者だけが退席する", async () => {
+        await svc.seedDemoState("demo");
+        const before = await seatedIds();
+        expect(before.length).toBeGreaterThanOrEqual(10);
+        await svc.draw(demo);
+        const removed = await svc.checkOutEveryone();
+        expect(removed).toBe(1); // デモ利用者だけ
+        expect((await seatedIds()).sort()).toEqual(before.sort());
+      });
+
+      it("日が変わっても、その日の席の例が入る。ほかの人がすでに座っている席は変えない", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-09-26T03:00:00Z"));
+        await svc.seedDemoState("demo");
+        vi.setSystemTime(new Date("2026-09-27T03:00:00Z")); // 翌日（サーバーは動いたまま）
+        await svc.draw(demo); // 抽選（席の例が先に入る）
+        const next = await seatedIds();
+        expect(next.length).toBeGreaterThanOrEqual(11); // 例 + 自分
+        expect(next).toContain("demo");
+      });
+    });
   describe("手動着席（QR・座席コード）", () => {
     it("同じ席に2人は着席できない", async () => {
       // hq のプライベート席は "4"〜"7"（グループ席1〜3の後）

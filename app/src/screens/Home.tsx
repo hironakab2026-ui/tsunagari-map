@@ -45,13 +45,28 @@ export function Home() {
     try {
       const [{ seat }] = await Promise.all([api.draw(branchId), new Promise((r) => setTimeout(r, 1000))]);
       setBranchId(seat.branchId);
+      // 結果を受け取った瞬間に、座席の表示へ反映する。最新の状態の取り直しを待つあいだ、「抽選する」が出直して押し直してしまわないように
+      floor.setData((f) => f && {
+        ...f,
+        assignments: { ...f.assignments, [seat.id]: [...(f.assignments[seat.id] ?? []).filter((id) => id !== me.id), me.id] },
+        counts: { ...f.counts, [seat.id]: (f.counts[seat.id] ?? 0) + 1 },
+      });
       bumpData();
       toast(`${seat.label}番の席に決まりました`);
     } catch (e) { setError(e); } finally { clearInterval(timer); setRolling(null); setBusy(false); }
   };
   const leave = async () => {
     setBusy(true); setError(null);
-    try { await api.checkOut(); bumpData(); toast("退席しました。お疲れさまでした"); } catch (e) { setError(e); } finally { setBusy(false); }
+    try {
+      await api.checkOut();
+      // 退席も、すぐ表示に反映する
+      floor.setData((f) => f && {
+        ...f,
+        assignments: Object.fromEntries(Object.entries(f.assignments).map(([k, ids]) => [k, ids.filter((id) => id !== me.id)])),
+        counts: mySeat ? { ...f.counts, [mySeat.id]: Math.max(0, (f.counts[mySeat.id] ?? 1) - 1) } : f.counts,
+      });
+      bumpData(); toast("退席しました。お疲れさまでした");
+    } catch (e) { setError(e); } finally { setBusy(false); }
   };
 
   return (

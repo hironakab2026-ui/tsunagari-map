@@ -18,6 +18,16 @@ const MEDIA_PATTERN = /^data:((?:image\/(?:png|jpeg))|(?:video\/(?:mp4|webm)));b
 const MEDIA_MAX_BYTES = 30 * 1024 * 1024;
 const MEDIA_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "video/mp4": "mp4", "video/webm": "webm" };
 
+/** デモの「席の例」。[席の番号, 座る人] */
+const DEMO_LAYOUT: [number, string[]][] = [
+  [1, ["u01", "u02", "u04"]],
+  [2, ["u07", "u10", "u11", "u08"]],
+  [3, ["u03", "u05"]],
+  [4, ["u06"]],
+  [5, ["u09"]],
+  [6, ["u12"]],
+];
+
 export function todayJst(offsetDays = 0) {
   const d = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000);
   return d.toISOString().slice(0, 10);
@@ -25,6 +35,9 @@ export function todayJst(offsetDays = 0) {
 
 export class Service {
   constructor(private store: DocStore) {}
+
+  /** デモ表示のとき（seedDemoState を呼んだあと）だけ設定される。席の例に使う人と、その日の分を入れたかどうか */
+  private demo?: { userId: string; examples: Set<string>; seatingFor?: { day: string; done: Promise<void> } };
 
   /**
    * 着席まわりの書き込み（抽選・QR着席・退席・座席設定の変更）は、1つずつ順番に行う。
@@ -179,6 +192,7 @@ export class Service {
   }
 
   async floor(user: User, branchId?: string) {
+    await this.ensureDemoSeating();
     const me = await this.me(user);
     const bid = branchId ?? me.branchId;
     const seats = await this.seatsOf(bid);
@@ -239,6 +253,7 @@ export class Service {
   /** QRコード・手入力で特定の席に着席する（集中席・固定席など、自分で席を選びたい場合） */
   checkIn(user: User, seatCode: string) {
     return this.serialized(async () => {
+      await this.ensureDemoSeating();
       if (!seatCode) throw new HttpError(400, "席番号を指定してください");
       const me = await this.me(user);
       const seats = await this.store.list<Seat>("Seats");
@@ -260,6 +275,7 @@ export class Service {
   /** ホーム画面の「抽選する」。選んだ支店（省略時は所属支店）の、空いている席の中からランダムに割り当てる。押したときだけ実行される */
   draw(user: User, branchId?: string) {
     return this.serialized(async () => {
+      await this.ensureDemoSeating();
       const me = await this.me(user);
       const bid = branchId || me.branchId;
       if (!(await this.store.get<Branch>("Branches", bid))) throw new HttpError(400, "支店の指定が正しくありません");
@@ -291,8 +307,11 @@ export class Service {
     const all = await this.store.list<SeatOccupancy>("Assignments");
     let n = 0;
     for (const o of all.filter((x) => x.date === today)) {
-      await this.store.remove("Assignments", `${o.seatId}:${o.date}`);
-      n += o.personIds.length;
+      // デモの「席の例」の人は残す（デモの見本が、毎日の一斉退席で消えないように）
+      const keep = o.personIds.filter((id) => this.demo?.examples.has(id));
+      if (keep.length > 0) await this.store.put<SeatOccupancy>("Assignments", `${o.seatId}:${o.date}`, o.branchId, { ...o, personIds: keep });
+      else await this.store.remove("Assignments", `${o.seatId}:${o.date}`);
+      n += o.personIds.length - keep.length;
     }
     return n;
   }
@@ -558,27 +577,39 @@ export class Service {
     await this.seedDemoVoices();
     await this.seedDemoReports();
     await this.seedDemoExtras(demoUserId);
-    if ((await this.occupancyToday("hq")).size > 0) return;
-    const today = todayJst();
-    const seatByNumber = new Map(SEED_SEATS.map((s) => [s.number, s]));
-    const layout: [number, string[]][] = [
-      [1, ["u01", "u02", "u04"]],
-      [2, ["u07", "u10", "u11", "u08"]],
-      [3, ["u03", "u05"]],
-      [4, ["u06"]],
-      [5, ["u09"]],
-      [6, ["u12"]],
-    ];
-    for (const [number, ids] of layout) {
-      const seat = seatByNumber.get(number)!;
-      const personIds = ids.filter((id) => id !== demoUserId);
-      if (personIds.length === 0) continue;
-      await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
-        branchId: seat.branchId, seatId: seat.id, date: today, personIds,
-      });
-    }
+    this.demo = { userId: demoUserId, examples: new Set(DEMO_LAYOUT.flatMap(([, ids]) => ids).filter((id) => id !== demoUserId)) };
+    await this.ensureDemoSeating();
   }
 
+  /**
+   * デモ用の「席の例」（本社の席に他の社員が座っている様子）を、その日の分が無ければ入れる。
+   * 日が変わっても、毎日20時の一斉退席のあとでも、デモの見本が消えないようにする。
+   * すでに誰かが座っている席には手を付けない。
+   */
+  private ensureDemoSeating(): Promise<void> {
+    const demo = this.demo;
+    if (!demo) return Promise.resolve();
+    const today = todayJst();
+    if (demo.seatingFor?.day !== today) {
+      demo.seatingFor = {
+        day: today,
+        done: (async () => {
+          const seats = await this.seatsOf("hq");
+          const byNumber = new Map(seats.map((s) => [s.number, s]));
+          for (const [number, ids] of DEMO_LAYOUT) {
+            const seat = byNumber.get(number);
+            const personIds = ids.filter((id) => id !== demo.userId);
+            if (!seat || personIds.length === 0) continue;
+            if (await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`)) continue;
+            await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
+              branchId: seat.branchId, seatId: seat.id, date: today, personIds: personIds.slice(0, seat.capacity),
+            });
+          }
+        })(),
+      };
+    }
+    return demo.seatingFor.done;
+  }
   /** デモ表示用：業務改善報告（すでに改善した事例）。拠点をまたいで一緒に取り組んだ例も入れる。すでに入っていれば何もしない */
   private async seedDemoReports() {
     // 詳細つきの新しい形になっていれば、何もしない（古い形で入っていた場合は、入れ直して詳細を足す）
