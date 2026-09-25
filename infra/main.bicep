@@ -67,7 +67,9 @@ var functionAppName = '${appName}-api'
 var planName = '${appName}-plan'
 var appInsightsName = '${appName}-insights'
 var staticWebAppName = '${appName}-app'
-// 注意: storeKind=sqlite の SQLite ファイルは、実機確認で数日後に消えて初期データへ戻った。
+// 注意: storeKind=sqlite でも、Azure 上では API が自動で Azure Table Storage（この Function App のストレージアカウント）に読み替える。
+//       SQLite ファイルはサーバー1台の中にあり、サーバーが複数台に増えると台ごとに別のデータになる（抽選した席が見えない等）うえ、数日で消えたため。
+//       読み替えたあとは、全台が同じデータを見て、消えない。
 // デモ表示専用で、データの保存先としては使えない。会社導入時は storeKind=sharepoint を使う
 var sqliteDbPath = '/home/data/tsunagari.db'
 var sqlitePhotoDir = '/home/data/photos'
@@ -116,9 +118,6 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'Node|${nodeVersion}'
-      // storeKind=sqlite（デモ用）はデータがサーバー内のファイルにあるため、サーバーが複数に増えると、
-      // 抽選した席が別のサーバーには見えず、席の重複や表示のずれが起きる。デモは1台に固定する
-      functionAppScaleLimit: storeKind == 'sqlite' ? 1 : 0
       cors: {
         allowedOrigins: empty(corsOrigin) ? [] : [corsOrigin]
       }

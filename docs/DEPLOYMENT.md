@@ -38,7 +38,8 @@ az deployment group create -g rg-tsunagari-map -f infra/main.bicep \
 この構成の制約：
 
 - 認証なし（`AUTH_DISABLED=true`）なので、URLを知っている人は誰でも開けます。社外秘の情報は入れないでください。
-- **データは永続しません。** Azure Functions（Linux 従量課金プラン）上の SQLite ファイルは、実機で数日後に初期状態へ戻ることを確認しました（`/home` 配下でも消える）。この構成は「サンプルデータ入りのデモを見せる」用途に限り、入力したデータを残したい場合は SharePoint（`storeKind=sharepoint`）か、Azure Table Storage など別の保存先が必要です。
+- **保存先:** Azure 上では `storeKind=sqlite` のままでも、API が自動で **Azure Table Storage**（Function App と同じストレージアカウント。データは表、写真・動画は Blob）に読み替えます。以前の SQLite ファイルは、サーバーが複数台に増えると台ごとに別のデータになり（抽選した席が別の台に見えない等）、数日で消えたためです。Table Storage なら全台が同じデータを見て、消えません。初回だけデモデータが入ります。データを初期化したいときは、ストレージアカウントの表 `TsunagariDocs` を削除してください。
+- 会社導入時は SharePoint（`storeKind=sharepoint`）を使います。この構成は認証なし・デモ向けです。
 - 本当に会社で運用するときは、下の「① Entra ID にアプリを登録」以降の手順で `storeKind=sharepoint` に切り替えてください。
 
 ## ① Entra ID にアプリを登録

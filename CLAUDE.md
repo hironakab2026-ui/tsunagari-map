@@ -10,6 +10,7 @@
 - 声の種類は `kaizen`（要改善事項）と `report`（業務改善報告）。声マップの集計対象はこの2つだけ（ひとこと・公式は含めない）。分野は `shared/src/fields.ts` の `IMPROVEMENT_FIELDS`（色もここ）。つながり＝共同者が別拠点にいる声（部門は問わない）。
 - 業務改善報告は、会社の「改善報告書」の項目（`Post.report`＝`ReportDetail`）で入力する。Word への書き出しは `shared/src/reportDoc.ts`（依存なしの zip 書き出し `zip.ts` を使い、ブラウザ内で作る。サーバーに送らない）。様式を変えるときは `buildReportBodyXml` を直し、`reportDoc.test.ts` を更新する。詳細のない古い投稿は、本文・効果から自動で埋める。
 - 着席まわり（抽選・QR着席・退席・座席設定）は `Service.serialized` で1件ずつ処理し、書いた直後に定員を確かめる。座席マップに出さない設定の人も、空席の数・満席の判定には数える（`floor().counts`）。
+- `STORE=table`（`api/src/lib/tableStore.ts`）は Azure Table Storage + Blob。Azure 上で `STORE=sqlite` のときは自動でこちらに読み替える（サーバー複数台でデータがずれないように）。`AZURITE_CONNECTION=UseDevelopmentStorage=true` を付け、ローカルの Azurite を起動して `npm test -w api` すると、実際の動作テストも走る（付けなければ飛ばす）。
 - 表示名は本名（`fullName`）。`nickname`（呼ばれたい名前）は名刺の自己紹介欄だけに出し、座席表・投稿・チャットには使わない。
 - オンライン表示：`Person.lastSeenAt`（アプリを開いている間の心拍）が5分以内、または今日着席中なら `online`（`shared/src/presence.ts`）。
 - 共有タスクは `Tasks`、アプリ内チャットは `Messages` コレクション（チャットは会話内容が入るため、SharePoint ではアクセス権を管理者に限定すること）。

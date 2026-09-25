@@ -2,6 +2,7 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/fu
 import { authenticate, HttpError, type User } from "./auth.js";
 import { Service } from "./service.js";
 import { MemoryStore, SharePointStore, SqliteStore, type DocStore } from "./store.js";
+import { TableStore } from "./tableStore.js";
 
 let service: Service | null = null;
 let ready: Promise<void> | null = null;
@@ -9,14 +10,20 @@ let ready: Promise<void> | null = null;
 export async function getService() {
   if (!service) {
     const storeKind = process.env.STORE;
+    // Azure 上で STORE=sqlite（デモ用）のときは、Azure Table Storage に読み替える。
+    // SQLite はサーバー1台の中のファイルなので、サーバーが複数台に増えると台ごとに別のデータになり、
+    // 抽選した席が別の台には見えない、日をまたぐと席の例が消える、といったずれが起きるため
+    const storageConn = process.env.TABLE_CONNECTION_STRING ?? process.env.AzureWebJobsStorage;
+    const useTable = !!storageConn && (storeKind === "table" || (storeKind === "sqlite" && !!process.env.WEBSITE_SITE_NAME));
     const store: DocStore =
       storeKind === "sharepoint" ? new SharePointStore(process.env.SP_SITE_ID!) :
+      useTable ? new TableStore(storageConn!) :
       storeKind === "sqlite" ? new SqliteStore(process.env.SQLITE_DB_PATH ?? "./.data/tsunagari.db", process.env.SQLITE_PHOTO_DIR ?? "./.data/photos") :
       new MemoryStore();
     service = new Service(store);
     if (storeKind === "sharepoint") {
       ready = Promise.resolve();
-    } else if (storeKind === "sqlite") {
+    } else if (storeKind === "sqlite" || storeKind === "table") {
       // 初回（データがまだ無いとき）だけデモデータを入れる。以後の起動では既存データをそのまま使う
       ready = store.list("Branches").then((existing) => (existing.length ? undefined : service!.seed()));
     } else {
