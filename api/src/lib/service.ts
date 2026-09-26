@@ -575,7 +575,7 @@ export class Service {
   /**
    * デモ用の「席の例」（本社の席に他の社員が座っている様子）を、その日の分が無ければ入れる。
    * 日が変わっても、毎日20時の一斉退席のあとでも、デモの見本が消えないようにする。
-   * すでに誰かが座っている席には手を付けない。
+   * すでに誰かが座っている席では、その人を残したまま、空いている分だけ足す。
    */
   private ensureDemoSeating(): Promise<void> {
     const demo = this.demo;
@@ -594,10 +594,12 @@ export class Service {
               const seat = byNumber.get(number);
               const personIds = ids.filter((id) => id !== demo.userId);
               if (!seat || personIds.length === 0) continue;
-              if (await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`)) continue;
-              await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
-                branchId: seat.branchId, seatId: seat.id, date: today, personIds: personIds.slice(0, seat.capacity),
-              });
+              // すでに誰かが座っている席は、その人を残したまま、空いている分だけ席の例を足す
+              const key = `${seat.id}:${today}`;
+              const current = (await this.store.get<SeatOccupancy>("Assignments", key))?.personIds ?? [];
+              const merged = [...current, ...personIds.filter((id) => !current.includes(id))].slice(0, seat.capacity);
+              if (merged.length === current.length) continue;
+              await this.store.put<SeatOccupancy>("Assignments", key, seat.branchId, { branchId: seat.branchId, seatId: seat.id, date: today, personIds: merged });
             }
           }
         })(),

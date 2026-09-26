@@ -229,6 +229,16 @@ describe("Service", () => {
       expect(await svc.chatThreads(demo)).toMatchObject([{ personId: "u02", unread: 1 }]);
     });
 
+    it("すでに誰かが座っている席にも、空いている分だけ席の例が足される。座っていた人は残る", async () => {
+      const a1: User = { id: "demo", email: "", name: "", roles: [] };
+      await svc.updateMe({ ...a1 }, { fullName: "デモ 利用者" }).catch(() => undefined);
+      const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      await store.put("Assignments", `a-1F-1:${today}`, "a", { branchId: "a", seatId: "a-1F-1", date: today, personIds: ["real1"] });
+      await svc.seedDemoState("demo");
+      const floor = await svc.floor(a1, "a");
+      expect(floor.assignments["a-1F-1"]).toContain("real1");
+      expect(floor.counts["a-1F-1"]).toBe(4); // 本人 + 例3人のうち、空いている3人分（定員4）
+    });
     it("本社以外の支店を選んでも、席の例が入っている", async () => {
       await svc.seedDemoState("demo");
       const demo: User = { id: "demo", email: "", name: "", roles: [] };
