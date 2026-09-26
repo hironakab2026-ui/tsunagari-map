@@ -1,6 +1,6 @@
 import {
   SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS,
-  IMPROVEMENT_FIELDS, aggregateVoiceMap, composeReportBody, composeReportEffect, validateReportDetail, buildSeatsFromConfig, drawSeat, routeKaizen,
+  DEMO_SEATING, IMPROVEMENT_FIELDS, aggregateVoiceMap, composeReportBody, composeReportEffect, validateReportDetail, buildSeatsFromConfig, drawSeat, routeKaizen,
   type Branch, type KaizenStatus, type Person, type Post, type PostKind, type Seat, type SeatConfig,
 } from "@tsunagari/shared";
 import { threadIdOf, type ChatMessage, type ChatThread, type SharedTask } from "@tsunagari/shared";
@@ -36,14 +36,13 @@ export class MockApi implements Api {
   ];
 
   constructor() {
-    // デモ用：本社のグループ席の1つに2人ほど着席させておく
+    // デモ用：本社の席に、他の社員が座っている例を入れておく（ふつうの利用状況に近い見え方にする）
     const hqSeats = this.seatsByBranch.get("hq")!;
-    const group = hqSeats.find((s) => s.kind === "group")!;
-    this.occupancy[group.id] = ["u07", "u10"];
-    const priv = hqSeats.find((s) => s.kind === "private")!;
-    this.occupancy[priv.id] = ["u02"];
+    for (const [number, ids] of DEMO_SEATING.hq) {
+      const seat = hqSeats.find((s) => s.number === number);
+      if (seat) this.occupancy[seat.id] = ids.filter((id) => id !== ME);
+    }
   }
-
   private currentPerson() { return this.peopleData.find((p) => p.id === ME)!; }
   private roles() { return ME === "u05" ? ADMIN_ROLES : []; }
   private isSeatAdmin(branchId: string) {

@@ -64,3 +64,36 @@ export const SEED_POSTS: Post[] = [
   { id: "r3", kind: "report", authorId: "u06", authorDept: "office", branchId: "hq", category: "業務の効率化", body: "名義変更の書類のチェック表を作った。", effect: "書類の戻りが減った", createdAt: today, reactions: 8 },
   { id: "r4", kind: "report", authorId: "u07", authorDept: "eng", branchId: "c", category: "安全", body: "ピットの通路に足元のラインを引いた。", effect: "つまずきそうになる場面が減った", createdAt: today, reactions: 10 },
   { id: "r5", kind: "report", authorId: "u03", authorDept: "eng", branchId: "a", category: "設備・環境", body: "板金ブースに送風機を追加した。", effect: "夏場の作業の負担が減った", createdAt: today, reactions: 6 },];
+
+/** デモ用：各支店の「席の例」。[席の番号, 座っている人]。グループ席は1〜3番、プライベート席は4番から */
+export const DEMO_SEATING: Record<string, [number, string[]][]> = {
+  hq: [
+    [1, ["u01", "u02", "u04"]], [2, ["u07", "u10", "u11", "u08"]], [3, ["u03", "u05"]],
+    [4, ["u06"]], [5, ["u09"]], [6, ["u12"]],
+  ],
+  a: [[1, ["v01", "v02", "w01"]], [2, ["w02", "w03"]], [4, ["w04"]]],
+  b: [[1, ["v03", "v04", "w05"]], [2, ["w06", "w07"]], [4, ["w08"]]],
+  c: [[1, ["v05", "v06", "w09"]], [2, ["w10", "w11"]], [4, ["w12"]]],
+  d: [[1, ["v07", "v08", "w13"]], [2, ["w14", "w15"]], [4, ["w16"]]],
+  e: [[1, ["v09", "v10", "w17"]], [2, ["w18", "w19"]], [4, ["w20"]]],
+};
+
+/** デモ用：支店ごとの社員（席の例に使う）。v01〜v10 はサービス側のデモ投稿用の人 */
+export const DEMO_STAFF: Person[] = (() => {
+  const P = (id: string, fullName: string, nickname: string, dept: Person["dept"], unit: string, branchId: string, skills: string[]): Person => ({
+    id, fullName, email: `${id}@example.co.jp`, nickname, dept, unit, branchId, skills, talkOk: true,
+    showOnSeatMap: true, showPrivate: false, profileCompleted: true,
+  });
+  return [
+    P("w01", "松本 大地", "だいち", "sales", "店舗営業", "a", ["新車提案"]), P("w02", "井上 千夏", "ちなつ", "eng", "サービス部", "a", ["点検"]),
+    P("w03", "木村 拓海", "たくみ", "sales", "U-Car", "a", ["査定"]), P("w04", "林 さくら", "さくら", "office", "事務", "a", ["受付"]),
+    P("w05", "斎藤 健", "けん", "sales", "店舗営業", "b", ["リース"]), P("w06", "清水 美優", "みゆ", "eng", "サービス部", "b", ["EV診断"]),
+    P("w07", "山口 翔", "しょう", "eng", "板金", "b", ["板金"]), P("w08", "池田 里奈", "りな", "office", "事務", "b", ["登録業務"]),
+    P("w09", "橋本 浩", "ひろし", "sales", "店舗営業", "c", ["初めての車選び"]), P("w10", "阿部 彩乃", "あやの", "eng", "サービス部", "c", ["車検"]),
+    P("w11", "石川 剛", "つよし", "sales", "U-Car", "c", ["下取り"]), P("w12", "前田 みどり", "みどり", "office", "事務", "c", ["保険手続き"]),
+    P("w13", "藤田 亮", "りょう", "sales", "店舗営業", "d", ["ファミリー層"]), P("w14", "後藤 真央", "まお", "eng", "サービス部", "d", ["整備説明"]),
+    P("w15", "岡本 隼", "はやと", "eng", "サービス部", "d", ["タイヤ"]), P("w16", "村田 綾", "あや", "office", "事務", "d", ["経理"]),
+    P("w17", "近藤 悠", "ゆう", "sales", "店舗営業", "e", ["法人リース"]), P("w18", "福田 陽菜", "ひな", "eng", "サービス部", "e", ["ADAS"]),
+    P("w19", "西村 誠也", "せいや", "sales", "U-Car", "e", ["中古車"]), P("w20", "三浦 ゆい", "ゆい", "office", "事務", "e", ["受付"]),
+  ];
+})();

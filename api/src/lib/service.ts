@@ -1,5 +1,5 @@
 import {
-  DEFAULT_ROUTING_RULES, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS,
+  DEFAULT_ROUTING_RULES, DEMO_SEATING, DEMO_STAFF, SEED_BRANCHES, SEED_PEOPLE, SEED_POSTS, SEED_SEATS,
   CHAT_MAX_LENGTH, aggregateVoiceMap, composeReportBody, composeReportEffect, validateReportDetail, buildSeatsFromConfig, detectPii, drawSeat, isOnline, routeKaizen, threadIdOf,
   type Branch, type ReportDetail, type ReportInput, type ChatMessage, type ChatThread, type KaizenStatus, type Person, type Post, type PostKind,
   type RoutingRule, type Seat, type SeatConfig, type SeatOccupancy, type SharedTask,
@@ -17,16 +17,6 @@ const AVATAR_MAX_LENGTH = 200_000; // data URL の文字数。256px角に切り�
 const MEDIA_PATTERN = /^data:((?:image\/(?:png|jpeg))|(?:video\/(?:mp4|webm)));base64,(.+)$/;
 const MEDIA_MAX_BYTES = 30 * 1024 * 1024;
 const MEDIA_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "video/mp4": "mp4", "video/webm": "webm" };
-
-/** デモの「席の例」。[席の番号, 座る人] */
-const DEMO_LAYOUT: [number, string[]][] = [
-  [1, ["u01", "u02", "u04"]],
-  [2, ["u07", "u10", "u11", "u08"]],
-  [3, ["u03", "u05"]],
-  [4, ["u06"]],
-  [5, ["u09"]],
-  [6, ["u12"]],
-];
 
 export function todayJst(offsetDays = 0) {
   const d = new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000);
@@ -577,7 +567,8 @@ export class Service {
     await this.seedDemoVoices();
     await this.seedDemoReports();
     await this.seedDemoExtras(demoUserId);
-    this.demo = { userId: demoUserId, examples: new Set(DEMO_LAYOUT.flatMap(([, ids]) => ids).filter((id) => id !== demoUserId)) };
+    for (const p of DEMO_STAFF) if (!(await this.store.get<Person>("People", p.id))) await this.store.put("People", p.id, p.branchId, p);
+    this.demo = { userId: demoUserId, examples: new Set(Object.values(DEMO_SEATING).flatMap((layout) => layout.flatMap(([, ids]) => ids)).filter((id) => id !== demoUserId)) };
     await this.ensureDemoSeating();
   }
 
@@ -594,16 +585,20 @@ export class Service {
       demo.seatingFor = {
         day: today,
         done: (async () => {
-          const seats = await this.seatsOf("hq");
-          const byNumber = new Map(seats.map((s) => [s.number, s]));
-          for (const [number, ids] of DEMO_LAYOUT) {
-            const seat = byNumber.get(number);
-            const personIds = ids.filter((id) => id !== demo.userId);
-            if (!seat || personIds.length === 0) continue;
-            if (await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`)) continue;
-            await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
-              branchId: seat.branchId, seatId: seat.id, date: today, personIds: personIds.slice(0, seat.capacity),
-            });
+          // 本社だけでなく、どの支店を選んでも席の例が見えるように、全支店に入れる
+          for (const [branchId, layout] of Object.entries(DEMO_SEATING)) {
+            if (!(await this.store.get<Branch>("Branches", branchId))) continue;
+            const seats = await this.seatsOf(branchId);
+            const byNumber = new Map(seats.map((s) => [s.number, s]));
+            for (const [number, ids] of layout) {
+              const seat = byNumber.get(number);
+              const personIds = ids.filter((id) => id !== demo.userId);
+              if (!seat || personIds.length === 0) continue;
+              if (await this.store.get<SeatOccupancy>("Assignments", `${seat.id}:${today}`)) continue;
+              await this.store.put<SeatOccupancy>("Assignments", `${seat.id}:${today}`, seat.branchId, {
+                branchId: seat.branchId, seatId: seat.id, date: today, personIds: personIds.slice(0, seat.capacity),
+              });
+            }
           }
         })(),
       };

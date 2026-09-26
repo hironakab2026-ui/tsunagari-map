@@ -229,6 +229,18 @@ describe("Service", () => {
       expect(await svc.chatThreads(demo)).toMatchObject([{ personId: "u02", unread: 1 }]);
     });
 
+    it("本社以外の支店を選んでも、席の例が入っている", async () => {
+      await svc.seedDemoState("demo");
+      const demo: User = { id: "demo", email: "", name: "", roles: [] };
+      for (const branch of ["hq", "a", "b", "c", "d", "e"]) {
+        const floor = await svc.floor(demo, branch);
+        const seated = Object.values(floor.assignments).flat();
+        expect(seated.length, branch).toBeGreaterThanOrEqual(5);
+        expect(seated.every((id) => id !== "demo")).toBe(true);
+        const people = await svc.people(demo);
+        expect(seated.every((id) => people.some((p) => p.id === id)), `${branch}の人が名簿にいる`).toBe(true);
+      }
+    });
     it("声マップに全支店の要改善事項・業務改善報告と、支店をまたぐつながりが出る", async () => {
       await svc.seedDemoState("demo");
       const map = await svc.voiceMap();
